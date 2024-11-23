@@ -283,7 +283,7 @@ class RecAPI {
     }
 
     public async login(username: string, password: string) {
-        const tempticket = await this.getTempTicket();
+        const tempTicket = await this.getTempTicket();
         const loginInfo = {
             username: username,
             password: password,
@@ -294,7 +294,7 @@ class RecAPI {
         const str = "A".repeat(12) + JSON.stringify(loginInfo).replace(/:/g, ": ").replace(/,/g, ", ");
         const encryptedStr = this.aesEncrypt(str);
         let sign = this.signatureToken + this.serializeDict({
-            tempticket: tempticket,
+            tempticket: tempTicket,
             msg_encrypt: Buffer.from(encryptedStr).toString("utf-8")
         });
         const hash = crypto.createHash('md5');
@@ -304,7 +304,7 @@ class RecAPI {
             method: "POST",
             url: "/user/login",
             params: {
-                tempticket: tempticket,
+                tempticket: tempTicket,
                 sign: sign
             },
             data: {
