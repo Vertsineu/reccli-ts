@@ -6,7 +6,7 @@ const dirPath = `${homedir()}/.reccli-ts`;
 
 // read user auth from file "~/.reccli-ts"
 function getUserAuth(account: string): UserAuth | undefined {
-    const path = `${dirPath}/${account}`;
+    const path = `${dirPath}/${account}.json`;
     if (!fs.existsSync(path)) return undefined;
     const userAuth = JSON.parse(fs.readFileSync(path, 'utf8'));
     return userAuth;
@@ -14,12 +14,12 @@ function getUserAuth(account: string): UserAuth | undefined {
 
 function setUserAuth(account: string, userAuth: UserAuth) {
     if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath);
-    const path = `${dirPath}/${account}`;
+    const path = `${dirPath}/${account}.json`;
     fs.writeFileSync(path, JSON.stringify(userAuth));
 }
 
 function deleteUserAuth(account: string): boolean {
-    const path = `${dirPath}/${account}`;
+    const path = `${dirPath}/${account}.json`;
     if (!fs.existsSync(path)) return false;
     fs.unlinkSync(path);
     return true;
