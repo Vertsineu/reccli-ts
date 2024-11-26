@@ -1,4 +1,5 @@
 import axios, { AxiosRequestConfig, HttpStatusCode } from "axios";
+import { group } from "console";
 import crypto from "crypto";
 import fs, { Stats } from "fs";
 import path from "path";
@@ -18,11 +19,6 @@ export type UserAuth = {
     name: string,
     authToken: string,
     refreshToken: string
-}
-
-export type IdUrlDictType = {
-    // id with download url
-    [key: string]: string
 }
 
 export type ActionType = "recycle" | "delete" | "restore" | "move" | "copy";
@@ -155,7 +151,104 @@ export type EntityType = {
         user_share_count: number,
         user_group_count: number,
         is_backup_file: boolean
-    }
+    },
+    getSpaceInfo: {
+        self_used_space: number,
+        self_total_space: number,
+        group_total_space: number,
+        group_used_space: number
+    },
+    getGroups: {
+        total: number,
+        datas: [
+            {
+                group_number: string,
+                group_name: string,
+                group_logo: string,
+                group_banner: string,
+                group_description: string,
+                group_created_date: string,
+                group_is_public: boolean,
+                group_is_open_publish: boolean,
+                group_is_auto_audit_mem_add: string,
+                group_is_review: string,
+                group_review_description: string,
+                group_member_identity: string,
+                group_member_is_agree_protocol: boolean,
+                group_category_number: string,
+                group_category_name: string,
+                group_creater_number: string,
+                group_creater_name: string,
+                group_creater_avatar: string,
+                group_owner_number: string,
+                group_owner_name: string,
+                group_owner_avatar: string,
+                group_memeber_count: number,
+                group_pending_member_count: number,
+                group_resource_report_count: number,
+                group_file_count: number,
+                group_share_file_count: number,
+                group_resource_count: number,
+                group_topic_count: number
+            }
+        ]
+    },
+    getGroupInfoByGroupId: {
+        group_number: number,
+        group_name: string,
+        group_logo: string,
+        group_banner: string,
+        group_description: string,
+        group_category_number: number,
+        group_category_name: string,
+        group_created_date: string,
+        group_creater_number: string,
+        group_creater_name: string,
+        group_creater_avatar: string,
+        group_owner_number: string,
+        group_owner_name: string,
+        group_owner_avatar: string,
+        group_memeber_count: number,
+        group_file_count: number,
+        group_share_file_count: number,
+        group_resource_count: number,
+        group_topic_count: number,
+        group_pending_member_count: number,
+        group_resource_report_count: number,
+        group_is_auto_audit_mem_add: boolean,
+        group_is_public: boolean,
+        group_is_review: string,
+        group_review_description: string,
+        group_is_open_publish: boolean,
+        group_member_identity: string,
+        group_member_is_agree_protocol: boolean,
+        group_tags_list: [
+            {
+                tag_number: string,
+                tag_name: string
+            }
+        ]
+    },
+    getPrivilegeByGroupId: {
+        role_info: {
+            id: 3999,
+            role_name: string,
+            group_id: string,
+            role_note: string,
+            created_id: string,
+            role_type: number,
+            created_at: string,
+            updated_at: string
+        },
+        public_operations: [ string ],
+        resource_operations: [
+            {
+                folder_id: string,
+                role_type: number
+            },
+        ]
+    },
+    findFileFromFirstLevelFolder: EntityType["listById"]
 }
 
 function pad(m: Buffer): Buffer {
@@ -286,6 +379,7 @@ class RecAPI {
         if (this.refreshedCallback) this.refreshedCallback(this.userAuth);
     }
 
+    // 通过用户名和密码登录，更新 UserAuth
     public async login(username: string, password: string) {
         const tempTicket = await this.getTempTicket();
         const loginInfo = {
@@ -332,14 +426,20 @@ class RecAPI {
         if (this.refreshedCallback) this.refreshedCallback(this.userAuth);
     }
 
-    public async listById(id: string, disk_type: string = "cloud"): Promise<FileType[]> {
+    // 列出给定 id 下的文件
+    // disk_type: "cloud" | "backup" | "recycle"
+    // id == B_0 <-> disk_type == "backup"
+    // id == R_0 <-> disk_type == "recycle"
+    public async listById(id: string, groupId?: string): Promise<EntityType["listById"]> {
         const res = await this.request<EntityType['listById']>({
             method: "GET",
             url: `/folder/content/${id}`,
             params: {
-                "is_rec": "false",
-                "category": "all",
-                "disk_type": disk_type,
+                is_rec: false,
+                category: "all",
+                disk_type: "cloud",
+                group_number: groupId,
+                offset: 0
             }
         });
 
@@ -347,28 +447,17 @@ class RecAPI {
             throw new Error(`Failed to list by id: ${res.message}`);
         }
 
-        return res.entity.datas.map(data => ({
-                id: data.number,
-                parent_id: data.parent_number,
-                type: data.type,
-                name: data.name,
-                ext: data.file_ext,
-                star: data.is_star,
-                lock: data.is_lock,
-                mtime: data.last_update_date,
-                size: Number(data.bytes),
-                creater: data.creater_user_real_name
-            })
-        );
-        
+        return res.entity;
     }
 
-    public async getDownloadUrlByIds(ids: string[]): Promise<IdUrlDictType> {
+    // 获取指定 id 的文件的下载链接
+    public async getDownloadUrlByIds(ids: string[], groupId?: string): Promise<EntityType["getDownloadUrlByIds"]> {
         const res = await this.request<EntityType["getDownloadUrlByIds"]>({
             method: "POST",
             url: "/download",
             data: {
-                files_list: ids
+                files_list: ids,
+                group_number: groupId
             }
         });
 
@@ -379,7 +468,8 @@ class RecAPI {
         return res.entity;
     }
 
-    public async uploadByFolderId(folderId: string, file_path: string): Promise<void> {
+    // 将本地文件上传到指定 id 的文件夹下
+    public async uploadByFolderId(folderId: string, file_path: string, groupId?: string): Promise<void> {
         let fileStat: Stats;
         try {
             fileStat = fs.statSync(file_path);
@@ -398,7 +488,8 @@ class RecAPI {
                 file_name: path.basename(file_path),
                 byte: fileStat.size,
                 storage: "moss",
-                disk_type: "cloud"
+                disk_type: "cloud",
+                group_number: groupId
             }
         });
 
@@ -442,7 +533,8 @@ class RecAPI {
         console.log("Upload complete");
     }
 
-    public async operationByIdType(action: ActionType, src: IdTypePairType[], destId: string): Promise<void> {
+    // 回收，删除，恢复，移动，复制文件或文件夹到指定 id 的文件夹
+    public async operationByIdType(action: ActionType, src: IdTypePairType[], destId: string, groupId?: string): Promise<void> {
         const res = await this.request({
             method: "POST",
             url: "/operationFileOrFolder",
@@ -453,7 +545,8 @@ class RecAPI {
                                 number: item.id,
                                 type: item.type
                             })),
-                number: destId
+                number: destId,
+                group_number: groupId
             }
         });
 
@@ -462,14 +555,16 @@ class RecAPI {
         }
     }
 
-    public async renameByIdType(dest: IdTypePairType, name: string): Promise<void> {
+    // 重命名文件夹
+    public async renameByIdType(dest: IdTypePairType, name: string, groupId?: string): Promise<void> {
         const res = await this.request({
             method: "POST",
             url: "/rename",
             data: {
                 name: name,
                 number: dest.id,
-                type: dest.type
+                type: dest.type,
+                group_number: groupId
             }
         });
 
@@ -478,13 +573,15 @@ class RecAPI {
         }
     }
 
-    public async renameByIdExt(dest: IdTypePairType, name: string): Promise<void> {
+    // 重命名文件
+    public async renameByIdExt(dest: IdTypePairType, name: string, groupId?: string): Promise<void> {
         const res = await this.request({
             method: "POST",
             url: "/rename_ext",
             data: {
                 name: name,
-                number: dest.id
+                number: dest.id,
+                group_number: groupId
             }
         });
 
@@ -493,14 +590,16 @@ class RecAPI {
         }
     }
 
-    public async mkdirByFolderIds(folderId: string, names: string[]): Promise<void> {
+    // 在同一文件夹下创建多个新文件夹
+    public async mkdirByFolderIds(folderId: string, names: string[], groupId?: string): Promise<void> {
         const res = await this.request({
             method: "POST",
             url: "/folder/tree",
             data: {
                 disk_type: "cloud",
                 number: folderId,
-                paramslist: names
+                paramslist: names,
+                group_number: groupId
             }
         });
 
@@ -509,11 +608,84 @@ class RecAPI {
         }
     }
 
+    // 获取用户信息
     public async getUserInfo(): Promise<EntityType["getUserInfo"]> {
         return (await this.request<EntityType["getUserInfo"]>({
             method: "GET",
             url: "/userinfo"
         })).entity;
+    }
+
+    // 获取个人空间和群组空间占用
+    public async getSpaceInfo(): Promise<EntityType["getSpaceInfo"]> {
+        return (await this.request<EntityType["getSpaceInfo"]>({
+            method: "POST",
+            url: "/group_capacit/get"
+        })).entity;
+    }
+
+    // 列举出所有群组信息
+    public async getGroups(): Promise<EntityType["getGroups"]> {
+        const res = await this.request<EntityType["getGroups"]>({
+            method: "GET",
+            url: "/groups"
+        });
+
+        if (res.status_code !== HttpStatusCode.Ok) {
+            throw new Error(`Failed to get groups: ${res.message}`);
+        }
+
+        return res.entity;
+    }
+
+    // 获取指定 group number 的群组信息
+    public async getGroupInfoByGroupId(groupId: string): Promise<EntityType["getGroupInfoByGroupId"]> {
+        return (await this.request<EntityType["getGroupInfoByGroupId"]>({
+            method: "GET",
+            url: `/groupinfo/public/${groupId}`,
+        })).entity;
+    }
+
+    // 获取指定 group number 的权限信息
+    public async getPrivilegeByGroupId(groupId: string): Promise<EntityType["getPrivilegeByGroupId"]> {
+        const res = await this.request<EntityType["getPrivilegeByGroupId"]>({
+            method: "POST",
+            url: `/group_user_role/get_privileges`,
+            data: {
+                group_id: groupId
+            }
+        });
+
+        if (res.status_code !== HttpStatusCode.Ok) {
+            throw new Error(`Failed to get privilege by group id: ${res.message}`);
+        }
+
+        return res.entity;
+    }
+
+    // 从顶层文件夹中查找文件
+    public async findFileFromFirstLevelFolder(searchName: string, firstLevelFolderId: string, groupId: string, range?: {startTime: string, endTime: string}): Promise<EntityType["findFileFromFirstLevelFolder"]> {
+        const res = await this.request<EntityType["findFileFromFirstLevelFolder"]>({
+            method: "GET",
+            url: `/resource/search`,
+            params: {
+                is_rec: false,
+                category: "file",
+                disk_type: "cloud",
+                group_number: groupId,
+                searchName: searchName,
+                offset: 0,
+                search_start_time: range?.startTime,
+                search_end_time: range?.endTime,
+                first_level_folder: firstLevelFolderId,
+            }
+        });
+
+        if (res.status_code !== HttpStatusCode.Ok) {
+            throw new Error(`Failed to find file from first level folder: ${res.message}`);
+        }
+
+        return res.entity;
     }
 
 }
