@@ -1,7 +1,7 @@
 import fs from "fs"
 import crypto from 'crypto';
 import { homedir } from "os";
-import { UserAuth } from "./rec-api"
+import { UserAuth } from "@utils/rec-api"
 
 const dirPath = `${homedir()}/.reccli-ts`;
 

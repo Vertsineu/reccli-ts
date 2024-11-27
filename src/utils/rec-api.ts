@@ -1,8 +1,11 @@
 import axios, { AxiosRequestConfig, HttpStatusCode } from "axios";
-import { group } from "console";
 import crypto from "crypto";
 import fs, { Stats } from "fs";
 import path from "path";
+
+export type ActionType = "recycle" | "delete" | "restore" | "move" | "copy";
+export type FileType = "file" | "folder";
+export type DiskType = "cloud" | "backup" | "recycle";
 
 export type ResponseType<T> = {
     status_code: number,
@@ -21,24 +24,9 @@ export type UserAuth = {
     refreshToken: string
 }
 
-export type ActionType = "recycle" | "delete" | "restore" | "move" | "copy";
-
 export type IdTypePairType = {
     id: string,
-    type: "file" | "folder"
-}
-
-export type FileType = {
-    id: string, // number
-    parent_id: string, // parent_number
-    type: "file" | "folder" // type
-    name: string, // name
-    ext: string, // file_ext
-    star: boolean, // is_star
-    lock: boolean, // is_lock
-    mtime: string, // last_update_time
-    size: number, // bytes
-    creater: string, // creater_user_real_name
+    type: FileType
 }
 
 export type EntityType = {
@@ -83,10 +71,10 @@ export type EntityType = {
                 creater_user_avatar: string,
                 number: string,
                 parent_number: string,
-                disk_type: string,
+                disk_type: DiskType,
                 is_history: boolean,
                 name: string,
-                type: "file" | "folder",
+                type: FileType,
                 file_ext: string,
                 file_type: string,
                 bytes: number | '', // string when type is folder and it's empty
@@ -108,30 +96,44 @@ export type EntityType = {
         [key: string]: string
     },
     uploadByFolderId: {
-        upload_params: [
-            [
-                {
-                    key: string, // "binary"
-                    request_type: string, // "body"
-                    value: string // ""
-                },
-                {
-                    key: string, // "url"
-                    request_type: string, // "url"
-                    value: string // url to upload
-                },
-                {
-                    key: string, // "method"
-                    request_type: string, // "method"
-                    value: string // "PUT"
-                }
-            ]
-        ],
-        upload_chunk_size: string,
-        upload_token: string,
-        file_number: number | '',
-        file_id: number | '',
-        version: 0
+        // md5 fingerprint not matched
+        fail: {
+            upload_params: [
+                [
+                    {
+                        key: string, // "binary"
+                        request_type: string, // "body"
+                        value: string // ""
+                    },
+                    {
+                        key: string, // "url"
+                        request_type: string, // "url"
+                        value: string // url to upload
+                    },
+                    {
+                        key: string, // "method"
+                        request_type: string, // "method"
+                        value: string // "PUT"
+                    }
+                ]
+            ],
+            upload_chunk_size: string,
+            upload_token: string,
+            file_number: number | '',
+            file_id: number | '',
+            version: 0
+        }, 
+        // md5 fingerprint matched
+        succeed: {
+            id: string,
+            number: string,
+            file_name: string,
+            file_ext: string,
+            file_size: number,
+            version: number,
+            file_number: string,
+            file_id: string
+        }
     },
     getUserInfo: {
         user_type: number,
@@ -231,7 +233,7 @@ export type EntityType = {
     },
     getPrivilegeByGroupId: {
         role_info: {
-            id: 3999,
+            id: number,
             role_name: string,
             group_id: string,
             role_note: string,
@@ -251,17 +253,6 @@ export type EntityType = {
     findFileFromFirstLevelFolder: EntityType["listById"]
 }
 
-function pad(m: Buffer): Buffer {
-    const paddingLength = 32 - (m.length % 32);
-    const padding = Buffer.alloc(paddingLength, paddingLength);
-    return Buffer.concat([m, padding]);
-}
-
-function unpad(m: Buffer): Buffer {
-    const paddingLength = m[m.length - 1];
-    return m.subarray(0, m.length - paddingLength);
-}
-
 class RecAPI {
     private readonly baseUrl: string = "https://recapi.ustc.edu.cn/api/v2";
     private readonly aesKey = Buffer.from("Z1pNbFZmMmVqd2wwVmlHNA==", "base64").toString("utf-8");
@@ -270,6 +261,11 @@ class RecAPI {
 
     private userAuth!: UserAuth;
 
+    /**
+     * Create a RecAPI instance
+     * @param initUserAuth initial userAuth 
+     * @param refreshedCallback callback when token refreshed
+     */
     constructor(
         // init with userAuth
         initUserAuth?: UserAuth,
@@ -279,6 +275,11 @@ class RecAPI {
         if (initUserAuth) this.userAuth = initUserAuth;
     }
 
+    /**
+     * Send a request with config
+     * @param config request config
+     * @returns response data
+     */
     private async request<T = object>(config: RequestConfig): Promise<ResponseType<T>> {
         // add baseUrl to config
         config.baseURL = this.baseUrl;
@@ -331,7 +332,7 @@ class RecAPI {
         size.writeUInt32BE(data.length, 0);  // Write the length of data in big-endian order
 
         const payload = Buffer.concat([size, Buffer.from(data, 'utf-8')]);
-        const paddedPayload = pad(payload); // Add padding
+        const paddedPayload = this.pad(payload); // Add padding
 
         const encrypted = Buffer.from(cipher.update(paddedPayload));
 
@@ -342,7 +343,7 @@ class RecAPI {
         const iv = Buffer.from(this.aesKey).reverse();
         const cipher = crypto.createDecipheriv('aes-128-cbc', this.aesKey, iv);
         let raw = Buffer.concat([cipher.update(Buffer.from(data, 'base64')), cipher.update(Buffer.alloc(16))]);
-        raw = unpad(raw);
+        raw = this.unpad(raw);
 
         if (headerStrip) {
             return raw.subarray(16).toString('utf-8');
@@ -379,7 +380,22 @@ class RecAPI {
         if (this.refreshedCallback) this.refreshedCallback(this.userAuth);
     }
 
-    // 通过用户名和密码登录，更新 UserAuth
+    private pad(m: Buffer): Buffer {
+        const paddingLength = 32 - (m.length % 32);
+        const padding = Buffer.alloc(paddingLength, paddingLength);
+        return Buffer.concat([m, padding]);
+    }
+    
+    private unpad(m: Buffer): Buffer {
+        const paddingLength = m[m.length - 1];
+        return m.subarray(0, m.length - paddingLength);
+    }
+
+    /**
+     * Login with username and password, update UserAuth
+     * @param username username
+     * @param password password
+     */
     public async login(username: string, password: string) {
         const tempTicket = await this.getTempTicket();
         const loginInfo = {
@@ -426,18 +442,21 @@ class RecAPI {
         if (this.refreshedCallback) this.refreshedCallback(this.userAuth);
     }
 
-    // 列出给定 id 下的文件
-    // disk_type: "cloud" | "backup" | "recycle"
-    // id == B_0 <-> disk_type == "backup"
-    // id == R_0 <-> disk_type == "recycle"
-    public async listById(id: string, groupId?: string): Promise<EntityType["listById"]> {
+    /**
+     * List files under the folder according to the id
+     * @param id folder id
+     * @param diskType cloud: personal cloud, backup: backup directory, recycle: recycle bin
+     * @param groupId group id
+     * @returns list of files
+     */
+    public async listById(id: string, diskType: DiskType, groupId?: string): Promise<EntityType["listById"]> {
         const res = await this.request<EntityType['listById']>({
             method: "GET",
             url: `/folder/content/${id}`,
             params: {
                 is_rec: false,
                 category: "all",
-                disk_type: "cloud",
+                disk_type: diskType,
                 group_number: groupId,
                 offset: 0
             }
@@ -450,7 +469,12 @@ class RecAPI {
         return res.entity;
     }
 
-    // 获取指定 id 的文件的下载链接
+    /**
+     * Get download url by ids
+     * @param ids ids of files
+     * @param groupId group id
+     * @returns dict of id with download url
+     */
     public async getDownloadUrlByIds(ids: string[], groupId?: string): Promise<EntityType["getDownloadUrlByIds"]> {
         const res = await this.request<EntityType["getDownloadUrlByIds"]>({
             method: "POST",
@@ -468,40 +492,98 @@ class RecAPI {
         return res.entity;
     }
 
-    // 将本地文件上传到指定 id 的文件夹下
-    public async uploadByFolderId(folderId: string, file_path: string, groupId?: string): Promise<void> {
+    private calcFingerprint(filePath: string): Promise<string> {
+        const chunkSize = 64 * 1024 * 1024; // 64MB
+
+        if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+            throw new Error("Invalid file path or file does not exist.");
+        }
+
+        const fileSize = fs.statSync(filePath).size;
+        const chunkHashes: string[] = [];
+
+        const readStream = fs.createReadStream(filePath, { highWaterMark: chunkSize });
+
+        return new Promise<string>((resolve, reject) => {
+            readStream
+                .on("data", (chunk: Buffer) => {
+                    // 对每个块计算 MD5
+                    const chunkHash = crypto.createHash("md5").update(chunk).digest("hex");
+                    chunkHashes.push(chunkHash);
+                })
+                .on("end", () => {
+                    if (fileSize <= chunkSize) {
+                        // 单块文件直接返回整个文件的 MD5
+                        resolve(chunkHashes[0]);
+                    } else {
+                        // 多块文件，合并块哈希后再计算 MD5
+                        const concatenatedHashes = Buffer.from(chunkHashes.join(""), "hex");
+                        const finalHash = crypto.createHash("md5").update(concatenatedHashes).digest("hex") + "-" + chunkHashes.length;
+                        resolve(finalHash);
+                    }
+                })
+                .on("error", (err) => {
+                    reject(err);
+                });
+        });
+    }
+
+    /**
+     * Upload file to folder by folder id
+     * @param folderId folder id
+     * @param filePath upload file path
+     * @param diskType cloud: personal cloud, backup: backup directory
+     * @param groupId group id
+     */
+    public async uploadByFolderId(folderId: string, filePath: string, diskType: DiskType, groupId?: string): Promise<void> {
         let fileStat: Stats;
         try {
-            fileStat = fs.statSync(file_path);
+            fileStat = fs.statSync(filePath);
             if (fileStat.isDirectory()) {
                 throw new Error("Cannot upload a directory");
             }
         } catch (err) {
             throw err;
         }
+
+        // response differs by status_code
+        type ResponseType = {
+            status_code: 200
+            message: string
+            entity: EntityType["uploadByFolderId"]["fail"]
+        } | {
+            status_code: 201
+            message: string
+            entity: EntityType["uploadByFolderId"]["succeed"]
+        };
         
         // 1. request for upload token and url
-        const res = await this.request<EntityType["uploadByFolderId"]>({
+        console.log("Calculating fingerprint...");
+        const res = await this.request<EntityType["uploadByFolderId"]["fail"] | EntityType["uploadByFolderId"]["succeed"]>({
             method: "GET",
             url: `/file/${folderId}`,
             params: {
-                file_name: path.basename(file_path),
+                file_name: path.basename(filePath),
                 byte: fileStat.size,
                 storage: "moss",
-                disk_type: "cloud",
-                group_number: groupId
+                disk_type: diskType,
+                group_number: groupId,
+                fingerprint: await this.calcFingerprint(filePath)
             }
-        });
+        }) as ResponseType;
 
-        if (res.status_code !== HttpStatusCode.Ok) {
-            throw new Error(`Failed to upload by folder id: ${res.message}`);
+        if (res.status_code === HttpStatusCode.Created) {
+            console.log("File already created, skipping upload");
+            return;
         }
+
+        console.log("Uploading file...");
 
         const uploadToken = res.entity.upload_token;
         const uploadChunkSize = Number(res.entity.upload_chunk_size);
         
         // 2 upload file
-        const fileStream = fs.createReadStream(file_path, { highWaterMark: uploadChunkSize });
+        const fileStream = fs.createReadStream(filePath, { highWaterMark: uploadChunkSize });
         let idx = 0;
         for await (const chunk of fileStream) {
             const uploadParams = res.entity.upload_params[idx++];
@@ -517,6 +599,7 @@ class RecAPI {
                 data: chunk,
             })
         }
+
         // 3. upload complete
         const res2 = await this.request({
             method: "POST",
@@ -533,14 +616,21 @@ class RecAPI {
         console.log("Upload complete");
     }
 
-    // 回收，删除，恢复，移动，复制文件或文件夹到指定 id 的文件夹
-    public async operationByIdType(action: ActionType, src: IdTypePairType[], destId: string, groupId?: string): Promise<void> {
+    /**
+     * Operate files or folders by id
+     * @param action move, copy, recycle, delete, restore
+     * @param src id and type of source files or folders
+     * @param destId destination folder id
+     * @param diskType cloud: personal cloud, backup: backup directory, recycle: recycle bin
+     * @param groupId group id
+     */
+    public async operationByIdType(action: ActionType, src: IdTypePairType[], destId: string | undefined, diskType: DiskType, groupId?: string): Promise<void> {
         const res = await this.request({
             method: "POST",
             url: "/operationFileOrFolder",
             data: {
                 action: action,
-                disk_type: "cloud",
+                disk_type: diskType,
                 files_list: src.map(item => ({
                                 number: item.id,
                                 type: item.type
@@ -555,7 +645,12 @@ class RecAPI {
         }
     }
 
-    // 重命名文件夹
+    /**
+     * rename folders by id and type
+     * @param dest destination id and type
+     * @param name new name
+     * @param groupId group id
+     */
     public async renameByIdType(dest: IdTypePairType, name: string, groupId?: string): Promise<void> {
         const res = await this.request({
             method: "POST",
@@ -573,7 +668,12 @@ class RecAPI {
         }
     }
 
-    // 重命名文件
+    /**
+     * rename files by id and type
+     * @param dest destination id and type
+     * @param name new name
+     * @param groupId group id
+     */
     public async renameByIdExt(dest: IdTypePairType, name: string, groupId?: string): Promise<void> {
         const res = await this.request({
             method: "POST",
@@ -590,13 +690,19 @@ class RecAPI {
         }
     }
 
-    // 在同一文件夹下创建多个新文件夹
-    public async mkdirByFolderIds(folderId: string, names: string[], groupId?: string): Promise<void> {
+    /**
+     * mkdir by folder id
+     * @param folderId folder id
+     * @param names new folder names
+     * @param diskType cloud: personal cloud, backup: backup directory
+     * @param groupId group id
+     */
+    public async mkdirByFolderIds(folderId: string, names: string[], diskType: DiskType, groupId?: string): Promise<void> {
         const res = await this.request({
             method: "POST",
             url: "/folder/tree",
             data: {
-                disk_type: "cloud",
+                disk_type: diskType,
                 number: folderId,
                 paramslist: names,
                 group_number: groupId
@@ -608,7 +714,10 @@ class RecAPI {
         }
     }
 
-    // 获取用户信息
+    /**
+     * Get user info
+     * @returns user info
+     */
     public async getUserInfo(): Promise<EntityType["getUserInfo"]> {
         return (await this.request<EntityType["getUserInfo"]>({
             method: "GET",
@@ -616,7 +725,10 @@ class RecAPI {
         })).entity;
     }
 
-    // 获取个人空间和群组空间占用
+    /**
+     * Get space info
+     * @returns space info
+     */
     public async getSpaceInfo(): Promise<EntityType["getSpaceInfo"]> {
         return (await this.request<EntityType["getSpaceInfo"]>({
             method: "POST",
@@ -624,7 +736,10 @@ class RecAPI {
         })).entity;
     }
 
-    // 列举出所有群组信息
+    /**
+     * Get groups info
+     * @returns groups info
+     */
     public async getGroups(): Promise<EntityType["getGroups"]> {
         const res = await this.request<EntityType["getGroups"]>({
             method: "GET",
@@ -638,15 +753,24 @@ class RecAPI {
         return res.entity;
     }
 
-    // 获取指定 group number 的群组信息
+    
+    /**
+     * Get group info by group id
+     * @param groupId group id
+     * @returns group info
+     */
     public async getGroupInfoByGroupId(groupId: string): Promise<EntityType["getGroupInfoByGroupId"]> {
         return (await this.request<EntityType["getGroupInfoByGroupId"]>({
             method: "GET",
             url: `/groupinfo/public/${groupId}`,
         })).entity;
     }
-
-    // 获取指定 group number 的权限信息
+    
+    /**
+     * Get group privilege by group id
+     * @param groupId group id
+     * @returns group privilege
+     */
     public async getPrivilegeByGroupId(groupId: string): Promise<EntityType["getPrivilegeByGroupId"]> {
         const res = await this.request<EntityType["getPrivilegeByGroupId"]>({
             method: "POST",
@@ -663,7 +787,14 @@ class RecAPI {
         return res.entity;
     }
 
-    // 从顶层文件夹中查找文件
+    /**
+     * Find file from first level folder in group
+     * @param searchName name to search
+     * @param firstLevelFolderId first level folder id
+     * @param groupId group id
+     * @param range time range
+     * @returns 
+     */
     public async findFileFromFirstLevelFolder(searchName: string, firstLevelFolderId: string, groupId: string, range?: {startTime: string, endTime: string}): Promise<EntityType["findFileFromFirstLevelFolder"]> {
         const res = await this.request<EntityType["findFileFromFirstLevelFolder"]>({
             method: "GET",
