@@ -1003,7 +1003,7 @@ class RecAPI {
         // wait for search copy job result
         let job = await this.searchCopyJobResult(jobId);
         while (job.state !== 2) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 200));
             job = await this.searchCopyJobResult(jobId);
         }
 
