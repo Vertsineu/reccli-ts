@@ -9,6 +9,8 @@ export type Role = {
     upload: boolean
 }
 
+// download not only means download, but also means save to cloud, etc.
+// upload not only means upload, but also means rename, etc.
 export const roles = [
     { label: "无权限", download: false, upload: false },  // 无权限
     { label: "拥有者", download: true, upload: true },    // 拥有者
@@ -87,6 +89,7 @@ const rootFolders: RecFile[] = [
     cloudRoot, recycleRoot, backupRoot, groupRoot
 ] as const;
 
+// need to catch error self
 class RecFileSystem {
     // 从根目录开始的当前路径
     private cwd: RecFile[] = [];
@@ -245,7 +248,6 @@ class RecFileSystem {
         return { stat: true, data: undefined };
     }
 
-    // dest can be not exist, if not exist, try make a file
     // dest can be a folder, if file, return false
     public async cp(src: string, dest: string): Promise<RetType<void>> {
         const srcPath = await this.calcPath(src);
@@ -261,7 +263,7 @@ class RecFileSystem {
 
         const srcFile = srcPath[srcPath.length - 1];
         const destFolder = destPath[destPath.length - 1];
-        // if src is a folder, then cp failed
+        // if destFolder is not a folder, then cp failed
         if (destFolder.type !== "folder") return {
             stat: false,
             msg: `${dest} is not a folder`
@@ -314,7 +316,7 @@ class RecFileSystem {
 
         const srcFile = srcPath[srcPath.length - 1];
         const destFolder = destPath[destPath.length - 1];
-        // if src is a folder, then mv failed
+        // if destFolder is not a folder, then mv failed
         if (destFolder.type !== "folder") return {
             stat: false,
             msg: `${dest} is not a folder`
@@ -423,7 +425,7 @@ class RecFileSystem {
         const srcFile = srcPath[srcPath.length - 1];
         const destFolder = destPath[destPath.length - 1];
 
-        // if src is a folder, then cp failed
+        // if destFolder is not a folder, then cp failed
         if (destFolder.type !== "folder") return {
             stat: false,
             msg: `${dest} is not a folder`
