@@ -122,7 +122,7 @@ class RecFileSystem {
                 continue;
             }
             // list all files in current folder
-            const files = await this.ls(cwd);
+            const files = await this.lsc(cwd);
             // if ls failed, return null
             if (!files.stat) return null;
             const file = files.data.find(f => f.name === p);
@@ -150,7 +150,8 @@ class RecFileSystem {
         };
     }
 
-    public async ls(cwd?: RecFile[]): Promise<RetType<RecFile[]>> {
+    // only function to get the hierarchy of files
+    private async lsc(cwd?: RecFile[]): Promise<RetType<RecFile[]>> {
         // 如果没有传入 cwd，则使用当前路径
         cwd = cwd || this.cwd;
         if (cwd.length === 0) {
@@ -233,6 +234,16 @@ class RecFileSystem {
                 lastModified: f.last_update_date
             }))
         };
+    }
+
+    public async ls(src: string): Promise<RetType<RecFile[]>> {
+        if (!src) return this.lsc();
+        const path = await this.calcPath(src);
+        if (!path) return {
+            stat: false,
+            msg: `${src} not found`
+        };
+        return this.lsc(path);
     }
 
     public async cd(src: string): Promise<RetType<void>> {
