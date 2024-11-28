@@ -314,7 +314,13 @@ export type EntityType = {
             folder_file_count: number,
             folder_size: string
         }
-    }
+    },
+    getRoleTypes: [
+        {
+            label: string,
+            value: number
+        }
+    ]
 }
 
 class RecAPI {
@@ -883,6 +889,12 @@ class RecAPI {
         return res.entity;
     }
 
+    /**
+     * Get file info by id and type
+     * @param dest id and type
+     * @param groupId group id
+     * @returns file info
+     */
     public async getFileInfo(dest: IdTypePairType, groupId?: string): Promise<EntityType["getFileInfo"][typeof dest.type]> {
 
         const res = await this.request<EntityType["getFileInfo"][typeof dest.type]>({
@@ -897,6 +909,23 @@ class RecAPI {
 
         if (res.status_code !== HttpStatusCode.Ok) {
             throw new Error(`Failed to get file info: ${res.message}`);
+        }
+
+        return res.entity;
+    }
+
+    /**
+     * Get role types
+     * @returns role types
+     */
+    public async getRoleTypes(): Promise<EntityType["getRoleTypes"]> {
+        const res = await this.request<EntityType["getRoleTypes"]>({
+            method: "POST",
+            url: "/group_resource_role/role_types"
+        });
+
+        if (res.status_code !== HttpStatusCode.Ok) {
+            throw new Error(`Failed to get role types: ${res.message}`);
         }
 
         return res.entity;

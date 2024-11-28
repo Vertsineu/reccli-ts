@@ -1,11 +1,30 @@
 import RecAPI, { DiskType, FileType } from "@utils/rec-api";
-import fs from "fs";
+import fs, { write } from "fs";
 import { downloadFile } from "@utils/download-utils";
 import { sep } from "path";
+
+export type Role = {
+    label: string,
+    download: boolean,
+    upload: boolean
+}
+
+export const roles = [
+    { label: "无权限", download: false, upload: false },  // 无权限
+    { label: "拥有者", download: true, upload: true },    // 拥有者
+    { label: "上传下载", download: true, upload: true },    // 上传下载
+    { label: "仅下载", download: true, upload: false },   // 仅下载
+    // can only download file self uploaded
+    { label: "仅上传", download: true, upload: true },    // 仅上传
+    { label: "仅预览", download: false, upload: false },  // 仅预览
+    { label: "发布", download: true, upload: true},     // 发布
+    { label: "管理者", download: true, upload: true },    // 管理者
+]
 
 export type RecFile = {
     id: string,
     disk_type: DiskType,
+    role: Role,
     groupId?: string,
 
     name: string,
@@ -22,6 +41,7 @@ export type RetType<T> =
 const cloudRoot: RecFile = {
     id: "0",
     disk_type: "cloud",
+    role: roles[1],
 
     name: "cloud",
     size: 0,
@@ -32,6 +52,7 @@ const cloudRoot: RecFile = {
 const recycleRoot: RecFile = {
     id: "0",
     disk_type: "recycle",
+    role: roles[0],
 
     name: "recycle",
     size: 0,
@@ -42,6 +63,7 @@ const recycleRoot: RecFile = {
 const backupRoot: RecFile = {
     id: "0",
     disk_type: "backup",
+    role: roles[1],
 
     name: "backup",
     size: 0,
@@ -52,6 +74,7 @@ const backupRoot: RecFile = {
 const groupRoot: RecFile = {
     id: "0",
     disk_type: "cloud",
+    role: roles[0],
 
     name: "group",
     size: 0,
@@ -142,6 +165,7 @@ class RecFileSystem {
                 data: groups.datas.map(g => ({
                     id: "0",
                     disk_type: "cloud",
+                    role: roles[0],
                     groupId: g.group_number,
 
                     name: g.group_name,
@@ -151,6 +175,37 @@ class RecFileSystem {
                     lastModified: ""
                 }))
             };
+        }
+        // 如果当前目录是 /group/xxx/，则需要获取权限
+        if (cwd.length == 2 && cwd[0] == groupRoot) {
+            const group = cwd[1]; // current group
+            const folders = await this.api.listById(group.id, group.disk_type, group.groupId);
+            // array of roles
+            const roleIdPairArray: {id: string, role: Role}[] = (await this.api.getPrivilegeByGroupId(group.groupId!)).resource_operations.map(r => ({
+                id: r.folder_id,
+                role: roles[r.role_type]
+            }));
+            // dict of roles
+            const roleIdPairDict: {[key: string]: Role} = {};
+            for (const roleIdPair of roleIdPairArray) {
+                roleIdPairDict[roleIdPair.id] = roleIdPair.role;
+            }
+
+            return {
+                stat: true,
+                data: folders.datas.map(f => ({
+                    id: f.number,
+                    disk_type: f.disk_type,
+                    role: roleIdPairDict[f.number] || roles[0], // get role from privilege, default to 0
+                    groupId: group.groupId, // extend groupId
+                    // if file, add file extension, otherwise, just name
+                    name: f.type === "file" ? f.name + "." + f.file_ext : f.name,
+                    size: Number(f.bytes),
+                    type: f.type,
+                    creator: f.creater_user_real_name,
+                    lastModified: f.last_update_date
+                }))
+            }
         }
         if (cwd[cwd.length - 1].type !== "folder") return {
             stat: false,
@@ -165,6 +220,7 @@ class RecFileSystem {
             data: files.datas.map(f => ({
                 id: f.number,
                 disk_type: f.disk_type,
+                role: folder.role, // extend role
                 groupId: folder.groupId, // extend groupId
                 // if file, add file extension, otherwise, just name
                 name: f.type === "file" ? f.name + "." + f.file_ext : f.name,
@@ -485,6 +541,11 @@ class RecFileSystem {
             stat: false,
             msg: `${dest} is not a folder`
         };
+        // if has no upload permission, then upload failed
+        if (!folder.role.upload) return {
+            stat: false,
+            msg: `no upload permission`
+        };
 
         // if src is not a file, then upload failed
         try {
@@ -533,6 +594,11 @@ class RecFileSystem {
         if (path[0].disk_type === "recycle") return {
             stat: false,
             msg: `cannot download a file in recycle`
+        };
+        // if has no download permission, then download failed
+        if (!file.role.download) return {
+            stat: false,
+            msg: `no download permission`
         };
 
         // if dest is not a folder, then download failed
