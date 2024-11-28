@@ -524,6 +524,11 @@ class RecFileSystem {
             stat: false,
             msg: `cannot download root folder or group root folder`
         };
+        // if path is a folder, then download failed
+        if (file.type === "folder") return {
+            stat: false,
+            msg: `${src} is a folder`
+        };
         // if path is in recycle, then download failed
         if (path[0].disk_type === "recycle") return {
             stat: false,
