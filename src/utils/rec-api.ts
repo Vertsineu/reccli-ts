@@ -250,7 +250,71 @@ export type EntityType = {
             },
         ]
     },
-    findFileFromFirstLevelFolder: EntityType["listById"]
+    findFileFromFirstLevelFolder: EntityType["listById"],
+    getFileInfo: {
+        file: {
+            creater_user_number: string,
+            creater_user_real_name: string,
+            creater_user_avatar: string,
+            number: string,
+            parent_number: string,
+            disk_type: DiskType,
+            is_history: boolean,
+            name: string,
+            type: FileType,
+            file_ext: string,
+            file_type: string,
+            bytes: number,
+            hash: string,
+            transcode_status: string,
+            is_star: boolean,
+            is_lock: boolean,
+            lock_reason: string,
+            share_count: number,
+            last_update_date: string,
+            parent_path_number: string,
+            review_status: string,
+            version_id: string,
+            version: number,
+            parent_path_name: string,
+            folder_count: number,
+            folder_file_count: number,
+            folder_size: string
+        },
+        folder: {
+            creater_user_number: string,
+            creater_user_real_name: string,
+            creater_user_avatar: string,
+            number: string,
+            parent_number: string,
+            disk_type: DiskType,
+            is_history: boolean,
+            name: string,
+            type: FileType,
+            file_ext: string,
+            file_type: string,
+            bytes: number,
+            hash: string,
+            transcode_status: string,
+            is_star: boolean,
+            is_lock: boolean,
+            lock_reason: string,
+            share_count: number,
+            last_update_date: {
+                date: string,
+                timezone_type: number,
+                timezone: string
+            },
+            parent_path_number: string,
+            review_status: string,
+            version_id: string,
+            version: number,
+            parent_path_name: string,
+            folder_count: number,
+            folder_file_count: number,
+            folder_size: string
+        }
+    }
 }
 
 class RecAPI {
@@ -814,6 +878,25 @@ class RecAPI {
 
         if (res.status_code !== HttpStatusCode.Ok) {
             throw new Error(`Failed to find file from first level folder: ${res.message}`);
+        }
+
+        return res.entity;
+    }
+
+    public async getFileInfo(dest: IdTypePairType, groupId?: string): Promise<EntityType["getFileInfo"][typeof dest.type]> {
+
+        const res = await this.request<EntityType["getFileInfo"][typeof dest.type]>({
+            method: "GET",
+            url: `/fileOrFolder/info/${dest.id}`,
+            params: {
+                type: dest.type,
+                is_path: true,
+                group_number: groupId
+            }
+        });
+
+        if (res.status_code !== HttpStatusCode.Ok) {
+            throw new Error(`Failed to get file info: ${res.message}`);
         }
 
         return res.entity;
