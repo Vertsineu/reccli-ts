@@ -1,6 +1,5 @@
 import RecAPI, { DiskType, FileType } from "@utils/rec-api";
 import fs from "fs";
-import { resolveShellPath } from "@utils/path-utils";
 import { downloadFile } from "@utils/download-utils";
 import { sep } from "path";
 
@@ -486,8 +485,7 @@ class RecFileSystem {
             stat: false,
             msg: `${dest} is not a folder`
         };
-        // resolve the src path
-        src = resolveShellPath(src);
+
         // if src is not a file, then upload failed
         try {
             const stats = fs.statSync(src);
@@ -532,9 +530,6 @@ class RecFileSystem {
             msg: `cannot download a file in recycle`
         };
 
-        // resolve the dest path
-        dest = dest.trim();
-        dest = resolveShellPath(dest);
         // if dest is not a folder, then download failed
         try {
             if (!fs.existsSync(dest)) {
