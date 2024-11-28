@@ -1,5 +1,5 @@
 import RecAPI, { DiskType, FileType } from "@utils/rec-api";
-import fs, { write } from "fs";
+import fs from "fs";
 import { downloadFile } from "@utils/download-utils";
 import { sep } from "path";
 
