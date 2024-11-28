@@ -320,7 +320,33 @@ export type EntityType = {
             label: string,
             value: number
         }
-    ]
+    ],
+    searchCopyJobResult: {
+        id: number,
+        job_id: string,
+        run_percent: number,
+        source_top_file_nums: number,
+        source_top_folder_nums: number,
+        source_file_nums: number,
+        source_folder_nums: number,
+        dest_file_nums: number,
+        dest_folder_nums: number,
+        dest_top_file_nums: number,
+        dest_top_folder_nums: number,
+        state: number,
+        error_reason: string,
+        job_type: number,
+        created_at: string,
+        updated_at: string,
+        share_number: string,
+        message: string
+    },
+    saveToCloud: {
+        job_id: string,
+        run_percent: number,
+        state: number,
+        message: string
+    }
 }
 
 class RecAPI {
@@ -929,6 +955,62 @@ class RecAPI {
         }
 
         return res.entity;
+    }
+
+    private async searchCopyJobResult(jobId: string): Promise<EntityType["searchCopyJobResult"]> {
+        const res = await this.request<EntityType["searchCopyJobResult"]>({
+            method: "POST",
+            url: "/search_copy_job_result",
+            data: {
+                job_id: jobId
+            }
+        });
+
+        if (res.status_code !== HttpStatusCode.Ok) {
+            throw new Error(`Failed to search copy job result: ${res.message}`);
+        }
+
+        return res.entity;
+    }
+
+    /**
+     * Save file or folder to cloud folder
+     * @param src id and type of source files or folders
+     * @param dest destination folder id
+     * @param groupId group id
+     */
+    public async saveToCloud(src: IdTypePairType[], dest: string, groupId: string): Promise<void> {
+        const res = await this.request<EntityType["saveToCloud"]>({
+            method: "POST",
+            url: "/group/resource/savetocloud",
+            data: {
+                disk_type: "cloud",
+                group_number: groupId,
+                resources_list: src.map(s => ({
+                    group_resource_number: s.id,
+                    group_resource_type: s.type
+                })),
+                target_folder_number: dest
+            }
+        });
+
+        if (res.status_code !== HttpStatusCode.Ok) {
+            throw new Error(`Failed to save to cloud: ${res.message}`);
+        }
+
+        const jobId = res.entity.job_id;
+
+        // wait for search copy job result
+        let job = await this.searchCopyJobResult(jobId);
+        while (job.state !== 2) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            job = await this.searchCopyJobResult(jobId);
+        }
+
+        if (job.state !== 2) {
+            throw new Error(`Failed to save to cloud: ${job.message}`);
+        }
+
     }
 
 }

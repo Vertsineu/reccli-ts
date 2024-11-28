@@ -635,6 +635,55 @@ class RecFileSystem {
         };
     }
 
+    // save from group to cloud
+    public async save(src: string, dest: string): Promise<RetType<void>> {
+        const srcPath = await this.calcPath(src);
+        // if path is null or path is root, then save failed
+        if (!srcPath || srcPath.length === 0) return {
+            stat: false,
+            msg: `${src} not found`
+        };
+        // if path is not in group, then save failed
+        if (srcPath.length <= 2 || srcPath[0] !== groupRoot) return {
+            stat: false,
+            msg: `${src} is not in group`
+        };
+
+        const destPath = await this.calcPath(dest);
+        // if path is null or path is root, then save failed
+        if (!destPath || destPath.length === 0) return {
+            stat: false,
+            msg: `${dest} not found`
+        };
+        // if path is not in cloud, then save failed
+        if (destPath[0].disk_type !== "cloud") return {
+            stat: false,
+            msg: `${dest} is not in cloud`
+        };
+
+        const srcFile = srcPath[srcPath.length - 1];
+        // if has no download permission, then save failed
+        if (!srcFile.role.download) return {
+            stat: false,
+            msg: `no download permission`
+        };
+        
+
+        const destFolder = destPath[destPath.length - 1];
+        // if destFolder is not a folder, then save failed
+        if (destFolder.type !== "folder") return {
+            stat: false,
+            msg: `${dest} is not a folder`
+        };
+
+        await this.api.saveToCloud([{id: srcFile.id, type: srcFile.type}], destFolder.id, srcFile.groupId!);
+
+        return {
+            stat: true,
+            data: undefined
+        };
+    }
+
     public async whoami(): Promise<RetType<{
         gid: string
         name: string,
