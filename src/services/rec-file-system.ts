@@ -237,7 +237,6 @@ class RecFileSystem {
     }
 
     public async ls(src: string): Promise<RetType<RecFile[]>> {
-        if (!src) return this.lsc();
         const path = await this.calcPath(src);
         if (!path) return {
             stat: false,
