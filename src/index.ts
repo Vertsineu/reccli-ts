@@ -13,8 +13,8 @@ program
 
 program
     .command("login")
-    .option("-a, --account <account>", "Student ID")
-    .option("-d, --default", "Set this account as the default account")
+    .option("-a, --account <account>", "student ID")
+    .option("-d, --default", "set this account as the default account")
     .description("Login to Rec Cloud Service using student ID and password")
     .action(async (options) => {
         try {
@@ -60,7 +60,7 @@ program
 program
     .command("run")
     .option("-a, --account <account>", "Student ID")
-    .description("Run the Rec Cloud Service CLI")
+    .description("run the Rec Cloud Service CLI")
     .action((options) => {
         const account = options.account;
 
