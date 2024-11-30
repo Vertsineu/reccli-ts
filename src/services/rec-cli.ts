@@ -1,8 +1,3 @@
-// 解析命令行中的命令
-// 根据 shell 语法解析命令行参数
-// 补全时缓存 file system 中的文件和目录
-// 处理 file system 中可能的 error
-
 import RecAPI, { FileType } from "@services/rec-api";
 import RecFileSystem from "@services/rec-file-system";
 import readline, { CompleterResult, Interface } from "readline";
@@ -12,7 +7,6 @@ import { TableFormatter } from "@utils/table-formatter";
 import { byteToSize } from "@utils/byte-to-size";
 import * as shellQuote from "shell-quote";
 import fs from "fs";
-import { color } from "@utils/color-string";
 
 type Command = {
     desc: string,
