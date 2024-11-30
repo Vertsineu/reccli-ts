@@ -3,13 +3,14 @@ import * as saver from "@services/rec-user-auth-saver";
 import RecCli from "@services/rec-cli";
 import { Command } from "commander";
 import inquirer from "inquirer";
+import { version } from "../package.json";
 
 const program = new Command();
 
 program
     .name("reccli-ts")
     .description("This is a command line interface for the Rec Cloud Service")
-    .version("1.0.1");
+    .version(version);
 
 program
     .command("login")
