@@ -15,7 +15,7 @@ program
     .command("login")
     .option("-a, --account <account>", "student ID")
     .option("-d, --default", "set this account as the default account")
-    .description("Login to Rec Cloud Service using student ID and password")
+    .description("login to Rec Cloud Service using student ID and password")
     .action(async (options) => {
         try {
             console.log("Welcome to Rec Cloud Service CLI!");
