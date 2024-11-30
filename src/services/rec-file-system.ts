@@ -303,6 +303,12 @@ class RecFileSystem {
             msg: `cannot copy to or from recycle`
         };
 
+        // if destFolder is or is subfolder of srcFolder, then cp failed
+        if (destPath.length >= srcPath.length && destPath.slice(0, srcPath.length).every((f, i) => f.id === srcPath[i].id)) return {
+            stat: false,
+            msg: `cannot copy to or into subfolder`
+        };
+
         await this.api.operationByIdType("copy", [{id: srcFile.id, type: srcFile.type}], destFolder.id, destFolder.disk_type, destFolder.groupId);
 
         return {
@@ -354,6 +360,12 @@ class RecFileSystem {
         if (srcPath[0].disk_type === "recycle" || destPath[0].disk_type === "recycle") return {
             stat: false,
             msg: `cannot move to or from recycle`
+        };
+        
+        // if destFolder is or is subfolder of srcFolder, then mv failed
+        if (destPath.length >= srcPath.length && destPath.slice(0, srcPath.length).every((f, i) => f.id === srcPath[i].id)) return {
+            stat: false,
+            msg: `cannot move to or into subfolder`
         };
 
         await this.api.operationByIdType("move", [{id: srcFile.id, type: srcFile.type}], destFolder.id, destFolder.disk_type, destFolder.groupId);
