@@ -77,10 +77,6 @@ reccli-ts run
 
 This command will execute the main functionality of the Rec Cloud Service CLI.
 
-### License
-
-This project continues to be licensed under the MIT License, and the original MIT License terms from the `reccli` project apply to the original codebase.
-
 You can view the original `reccli` repository [here](https://github.com/taoky/reccli).
 
 ## Acknowledgements
@@ -93,3 +89,7 @@ The following modifications were made to the original project:
 
 - The original Python implementation has been re-written in TypeScript for better integration with modern JavaScript/TypeScript environments.
 - Added new functionality for **group cloud drive access**, allowing users to manage group-based operations in addition to individual account functionalities.
+
+## License
+
+This project continues to be licensed under the MIT License, and the original MIT License terms from the `reccli` project apply to the original codebase.
