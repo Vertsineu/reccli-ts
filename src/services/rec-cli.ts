@@ -2,7 +2,7 @@ import RecAPI, { FileType } from "@services/rec-api";
 import RecFileSystem from "@services/rec-file-system";
 import readline, { CompleterResult, Interface } from "readline";
 import { exit } from "process";
-import { resolveFullPath } from "@utils/path-resolver";
+import { escapeToShell, resolveFullPath, unescapeFromShell } from "@utils/path-resolver";
 import { TableFormatter } from "@utils/table-formatter";
 import { byteToSize } from "@utils/byte-to-size";
 import * as shellQuote from "shell-quote";
@@ -437,7 +437,7 @@ class RecCli {
     private async getPathCompletions(arg: string, type: "rfs" | "fs"): Promise<string[]> {
         try {
             // support space in file name
-            arg = arg.replace(/\\ /g, " ");
+            arg = unescapeFromShell(arg);
             // get the directory path and file prefix
             const dirPath = arg.slice(0, arg.lastIndexOf("/") + 1) ?? "./";
             const filePrefix = arg.slice(arg.lastIndexOf("/") + 1) ?? "";
@@ -453,7 +453,7 @@ class RecCli {
                                 .filter(f => f.startsWith(filePrefix) && f !== filePrefix)
                                 .map(f => dirPath + f)
                                 // support space in file name
-                                .map(f => f.replace(/ /g, "\\ "));
+                                .map(f => escapeToShell(f));
             } else if (type === "fs") {
                 // define the file type
                 type File = {
@@ -485,7 +485,7 @@ class RecCli {
                             .filter(f => showHidden || !f.startsWith("."))
                             .map(f => dirPath + f)
                             // support space in file name
-                            .map(f => f.replace(/ /g, "\\ "));
+                            .map(f => escapeToShell(f));
             }
         } catch (err) {
             // if error, return empty completions
@@ -505,7 +505,7 @@ class RecCli {
         const [cmd, ...args] = shellQuote.parse(line).map((arg) => arg.toString());
 
         // last arg with possible space
-        const lastArgOriginal = (args[args.length - 1] ?? "").replace(/ /g, "\\ ");
+        const lastArgOriginal = escapeToShell(args[args.length - 1] ?? "");
 
         const isLastCharSpace = line[line.length - 1] === " " && line[line.length - 2] !== "\\";
         // if the last char is space, then the prefix is the whole line
