@@ -1,6 +1,6 @@
 import RecAPI, { DiskType, FileType } from "@utils/rec-api";
 import fs from "fs";
-import { downloadFile } from "@utils/download-utils";
+import { downloadFile } from "@utils/downloader";
 import { sep } from "path";
 
 export type Role = {
@@ -732,27 +732,15 @@ class RecFileSystem {
         };
     }
 
-    // convert byte to size representation
-    private byteToSize(bytes: number): string {
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-        if (bytes === 0) return '0 Byte';
-        const i = Math.floor(Math.log(bytes) / Math.log(1024));
-        return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + sizes[i];
-    }
-
     // get space info
     public async df(): Promise<RetType<{
         user: {
             usedBytes: number,
             totalBytes: number,
-            usedSpace: string,
-            totalSpace: string
         },
         group: {
             usedBytes: number,
             totalBytes: number,
-            usedSpace: string,
-            totalSpace: string
         }
     }>> {
         const res = await this.api.getSpaceInfo();
@@ -762,14 +750,10 @@ class RecFileSystem {
                 user: {
                     usedBytes: res.self_used_space,
                     totalBytes: res.self_total_space,
-                    usedSpace: this.byteToSize(res.self_used_space),
-                    totalSpace: this.byteToSize(res.self_total_space)
                 },
                 group: {
                     usedBytes: res.group_used_space,
                     totalBytes: res.group_total_space,
-                    usedSpace: this.byteToSize(res.group_used_space),
-                    totalSpace: this.byteToSize(res.group_total_space)
                 }
             }
         };
