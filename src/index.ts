@@ -9,7 +9,7 @@ const program = new Command();
 program
     .name("reccli-ts")
     .description("This is a command line interface for the Rec Cloud Service")
-    .version("1.0.0");
+    .version("1.0.1");
 
 program
     .command("login")
