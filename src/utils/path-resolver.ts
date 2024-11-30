@@ -51,7 +51,6 @@ const escapeMap: {[key: string]: string} = {
     ']': '\\]',    // 右方括号转义
     '{': '\\{',    // 左花括号转义
     '}': '\\}',    // 右花括号转义
-    '~': '\\~',    // 波浪符转义
     ' ': '\\ ',    // 空格转义
     '\n': '\\n'    // 换行符转义
 };
@@ -76,19 +75,18 @@ const unescapeMap: {[key: string]: string} = {
     '\\]': ']',    // 右方括号还原
     '\\{': '{',    // 左花括号还原
     '\\}': '}',    // 右花括号还原
-    '\\~': '~',    // 波浪符还原
     '\\ ': ' ',    // 空格还原
     '\\n': '\n'    // 换行符还原
 };
 
 export function unescapeFromShell(path: string): string {
-    return path.replace(/\\[\\'"\$\`#()<>;&|*?[\]{}~\s\n]/g, (match) => {
+    return path.replace(/\\[\\'"\$\`#()<>;&|*?[\]{}\s\n]/g, (match) => {
         return unescapeMap[match] || match;
     });
 }
 
 export function escapeToShell(path: string): string {
-    return path.replace(/[\\'"\$\`#()<>;&|*?[\]{}~\s\n]/g, (match) => {
+    return path.replace(/[\\'"\$\`#()<>;&|*?[\]{}\s\n]/g, (match) => {
         return escapeMap[match] || match;
     });
 }
