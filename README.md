@@ -2,6 +2,10 @@
 
 `reccli-ts` is a command-line interface (CLI) for the **Rec Cloud Service**, re-implemented in **TypeScript**. It is a modernized version of the original [reccli](https://github.com/taoky/reccli) project, which was originally written in Python.
 
+## Warning
+
+This project is still under development and is not yet ready for production use. Please use it at your own risk.
+
 ## Disclaimer
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
