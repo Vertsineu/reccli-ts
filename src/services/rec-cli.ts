@@ -3,7 +3,7 @@
 // 补全时缓存 file system 中的文件和目录
 // 处理 file system 中可能的 error
 
-import RecAPI, { FileType } from "@utils/rec-api";
+import RecAPI, { FileType } from "@services/rec-api";
 import RecFileSystem from "@services/rec-file-system";
 import readline, { CompleterResult, Interface } from "readline";
 import { exit } from "process";

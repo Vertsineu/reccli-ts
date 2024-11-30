@@ -1,4 +1,4 @@
-import RecAPI, { DiskType, FileType } from "@utils/rec-api";
+import RecAPI, { DiskType, FileType } from "@services/rec-api";
 import fs from "fs";
 import { downloadFile } from "@utils/downloader";
 import { sep } from "path";
