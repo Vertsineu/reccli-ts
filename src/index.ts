@@ -73,7 +73,7 @@ program
             saver.setUserAuth(account, userAuth);
         });
 
-        const cli = new RecCli(api);
+        const cli = new RecCli(api, true);
 
         if (lines) {
             // Run the commands and exit

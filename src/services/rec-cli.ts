@@ -8,6 +8,7 @@ import { byteToSize } from "@utils/byte-to-size";
 import * as shellQuote from "shell-quote";
 import fs from "fs";
 import { CacheFile, RecFileCache } from "./rec-file-cache";
+import { Readable } from "stream";
 
 type Command = {
     desc: string,
@@ -127,10 +128,11 @@ class RecCli {
     private interrupted = false;
     private interruptCount = 0;
 
-    constructor(api: RecAPI) {
+    constructor(api: RecAPI, nonInteractive?: boolean) {
         this.rfs = new RecFileSystem(api);
         this.rl = readline.createInterface({
-            input: process.stdin,
+            // if nonInteractive, use a readable stream that does nothing
+            input: nonInteractive ? new Readable({ read() {} }) : process.stdin,
             output: process.stdout,
             prompt: "/> ",
             completer: (line, callback) => this.completer(line, callback),
@@ -417,7 +419,7 @@ class RecCli {
         }
     }
 
-    public async parseLine(line: string, noPrompt?: boolean): Promise<void> {
+    public async parseLine(line: string, nonInteractive?: boolean): Promise<void> {
         // 1. handle interrupt
         // interrupted and line is empty
         if (this.interrupted) {
@@ -447,11 +449,10 @@ class RecCli {
         }
         
         // 3. update prompt
-        if (!noPrompt) {
-            const pwd = this.rfs.pwd();
-            this.rl.setPrompt((pwd.stat ? pwd.data : "/") + "> ");
-            this.rl.prompt();
-        }
+        if (nonInteractive) return;
+        const pwd = this.rfs.pwd();
+        this.rl.setPrompt((pwd.stat ? pwd.data : "/") + "> ");
+        this.rl.prompt();
     }
 
     private interrupt(): void {
