@@ -73,9 +73,9 @@ program
             saver.setUserAuth(account, userAuth);
         });
 
-        const cli = new RecCli(api, true);
-
+        // non-interactive mode
         if (lines) {
+            const cli = new RecCli(api, true);
             // Run the commands and exit
             for (const line of lines) {
                 await cli.parseLine(line, true);
@@ -83,6 +83,7 @@ program
             exit(0);
         }
 
+        const cli = new RecCli(api);
         cli.run();
     });
 
