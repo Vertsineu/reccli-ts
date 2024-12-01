@@ -391,7 +391,7 @@ class RecCli {
         }
     }
 
-    private async parseLine(line: string): Promise<void> {
+    public async parseLine(line: string, noPrompt?: boolean): Promise<void> {
         // 1. handle interrupt
         // interrupted and line is empty
         if (this.interrupted) {
@@ -421,9 +421,11 @@ class RecCli {
         }
         
         // 3. update prompt
-        const pwd = this.rfs.pwd();
-        this.rl.setPrompt((pwd.stat ? pwd.data : "/") + "> ");
-        this.rl.prompt();
+        if (!noPrompt) {
+            const pwd = this.rfs.pwd();
+            this.rl.setPrompt((pwd.stat ? pwd.data : "/") + "> ");
+            this.rl.prompt();
+        }
     }
 
     private interrupt(): void {

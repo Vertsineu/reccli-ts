@@ -4,6 +4,7 @@ import RecCli from "@services/rec-cli";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import { version } from "../package.json";
+import { exit } from "process";
 
 const program = new Command();
 
@@ -60,10 +61,12 @@ program
 
 program
     .command("run")
-    .option("-a, --account <account>", "Student ID")
+    .option("-a, --account <account>", "student ID")
+    .option("-c, --commands <command...>", "commands to run")
     .description("run the Rec Cloud Service CLI")
-    .action((options) => {
+    .action(async (options) => {
         const account = options.account;
+        const lines: string[] = options.commands;
 
         const userAuth = saver.getUserAuth(account);
         const api = new RecAPI(userAuth, (userAuth) => {
@@ -71,6 +74,15 @@ program
         });
 
         const cli = new RecCli(api);
+
+        if (lines) {
+            // Run the commands and exit
+            for (const line of lines) {
+                await cli.parseLine(line, true);
+            }
+            exit(0);
+        }
+
         cli.run();
     });
 
