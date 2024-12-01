@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import RecAPI from "@services/rec-api";
 import * as saver from "@services/rec-user-auth-saver";
 import RecCli from "@services/rec-cli";
