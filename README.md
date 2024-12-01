@@ -18,26 +18,40 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## Installation
 
-### Step 1: Clone the repository
+### Install from npm
+
+```bash
+npm install -g reccli-ts
+```
+
+After installing the package, you can run the CLI with:
+
+```bash
+reccli-ts
+```
+
+### Building from Source
+
+#### Step 1: Clone the repository
 
 ```bash
 git clone https://github.com/Vertsineu/reccli-ts.git
 cd reccli-ts
 ```
 
-### Step 2: Install dependencies
+#### Step 2: Install dependencies
 
 ```bash
 npm install
 ```
 
-### Step 3: Build the project
+#### Step 3: Build the project
 
 ```bash
 npm run build
 ```
 
-### Step 4: Run the CLI
+#### Step 4: Run the CLI
 
 ```bash
 npm run start
@@ -45,13 +59,13 @@ npm run start
 
 Alternatively, if you want to use Bun to generate the binary package, follow these steps:
 
-+ Install Bun if you haven't already:
+- Install Bun if you haven't already:
 
 ```bash
 npm install -g bun
 ```
 
-+ Build the project:
+- Build the project:
 
 ```bash
 bun build --compile --minify --sourcemap ./src/index.ts --outfile reccli-ts
@@ -62,6 +76,8 @@ Then you can run the CLI with:
 ```bash
 ./reccli-ts
 ```
+
+However, if you use bun to build the project, there may be some bugs in the generated binary package. It is recommended to install the package from npm.
 
 ## Usage
 
