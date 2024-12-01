@@ -1,12 +1,13 @@
 import RecAPI, { FileType } from "@services/rec-api";
-import RecFileSystem from "@services/rec-file-system";
+import RecFileSystem, { RecFile } from "@services/rec-file-system";
 import readline, { CompleterResult, Interface } from "readline";
 import { exit } from "process";
-import { escapeToShell, resolveFullPath, unescapeFromShell } from "@utils/path-resolver";
+import { escapeToShell, resolveFullPath, resolveRecFullPath, unescapeFromShell } from "@utils/path-resolver";
 import { TableFormatter } from "@utils/table-formatter";
 import { byteToSize } from "@utils/byte-to-size";
 import * as shellQuote from "shell-quote";
 import fs from "fs";
+import { CacheFile, RecFileCache } from "./rec-file-cache";
 
 type Command = {
     desc: string,
@@ -120,6 +121,7 @@ const commands: {[key: string]: Command} = {
 
 class RecCli {
     private rfs: RecFileSystem;
+    private rfc: RecFileCache = new RecFileCache();
     private rl: Interface;
 
     private interrupted = false;
@@ -177,6 +179,12 @@ class RecCli {
                     lastModified: { value: f.lastModified }
                 }));
                 console.log(formatter.formatTable(data));
+                // update cache
+                this.rfc.updateCacheFolder(resolveRecFullPath(this.rfs, src), ls.data.map(f => ({
+                    name: f.name,
+                    type: f.type,
+                    children: undefined
+                })));
                 break;
             }
             case "lsp": {
@@ -188,6 +196,12 @@ class RecCli {
                 ls.data.forEach((f) => {
                     console.log(escapeToShell(f.name + (f.type === "folder" ? "/" : "")));
                 });
+                // update cache
+                this.rfc.updateCacheFolder(resolveRecFullPath(this.rfs, src), ls.data.map(f => ({
+                    name: f.name,
+                    type: f.type,
+                    children: undefined
+                })));
                 break;
             }
             case "cd": {
@@ -208,6 +222,7 @@ class RecCli {
                 if (!cp.stat) {
                     throw new Error(`cp: ${cp.msg}`);
                 }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst));
                 break;
             }
             case "mv": {
@@ -220,6 +235,8 @@ class RecCli {
                 if (!mv.stat) {
                     throw new Error(`mv: ${mv.msg}`);
                 }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, src));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst));
                 break;
             }
             case "rm": {
@@ -231,6 +248,7 @@ class RecCli {
                 if (!rm.stat) {
                     throw new Error(`rm: ${rm.msg}`);
                 }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path));
                 break;
             }
             case "mkdir": {
@@ -242,6 +260,7 @@ class RecCli {
                 if (!mkdir.stat) {
                     throw new Error(`mkdir: ${mkdir.msg}`);
                 }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path));
                 break;
             }
             case "rmdir": {
@@ -253,6 +272,7 @@ class RecCli {
                 if (!rmdir.stat) {
                     throw new Error(`rmdir: ${rmdir.msg}`);
                 }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path));
                 break;
             }
             case "recycle": {
@@ -264,6 +284,7 @@ class RecCli {
                 if (!recycle.stat) {
                     throw new Error(`recycle: ${recycle.msg}`);
                 }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path));
                 break;
             }
             case "restore": {
@@ -276,6 +297,8 @@ class RecCli {
                 if (!restore.stat) {
                     throw new Error(`restore: ${restore.msg}`);
                 }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, src));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst));
                 break;
             }
             case "rename": {
@@ -288,6 +311,7 @@ class RecCli {
                 if (!rename.stat) {
                     throw new Error(`rename: ${rename.msg}`);
                 }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, src));
                 break;
             }
             case "upload": {
@@ -300,6 +324,7 @@ class RecCli {
                 if (!upload.stat) {
                     throw new Error(`upload: ${upload.msg}`);
                 }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst));
                 break;
             }
             case "download": {
@@ -324,6 +349,7 @@ class RecCli {
                 if (!save.stat) {
                     throw new Error(`save: ${save.msg}`);
                 }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst));
                 break;
             }
             case "whoami": {
@@ -460,25 +486,45 @@ class RecCli {
             const dirPath = arg.slice(0, arg.lastIndexOf("/") + 1) ?? "./";
             const filePrefix = arg.slice(arg.lastIndexOf("/") + 1) ?? "";
 
-            if (type === "rfs") {
-                const ls = await this.rfs.ls(dirPath);
+            // define the file type
+            type File = {
+                name: string,
+                type: FileType
+            }
 
-                if (!ls.stat) {
-                    return [];
+            if (type === "rfs") {
+                // find result in cache no recursion here
+                const cachePath = resolveRecFullPath(this.rfs, dirPath);
+                const cache = this.rfc.listCacheFolder(cachePath);
+
+                let files: File[];
+
+                if (cache) 
+                    files = cache;
+                else {
+                    const ls = await this.rfs.ls(dirPath);
+
+                    if (!ls.stat) {
+                        return [];
+                    }
+
+                    // update cache
+                    this.rfc.updateCacheFolder(cachePath, ls.data.map(f => ({
+                        name: f.name,
+                        type: f.type,
+                        // children must be undefined, because we need children to find whether it's an empty folder or a folder not cached
+                        children: undefined
+                    })));
+
+                    files = ls.data;
                 }
 
-                return ls.data.map(f => f.name + (f.type === "folder" ? "/" : ""))
+                return files.map(f => f.name + (f.type === "folder" ? "/" : ""))
                                 .filter(f => f.startsWith(filePrefix) && f !== filePrefix)
                                 .map(f => dirPath + f)
                                 // support space in file name
                                 .map(f => escapeToShell(f));
             } else if (type === "fs") {
-                // define the file type
-                type File = {
-                    name: string,
-                    type: FileType
-                }
-
                 // resolve the path
                 const path = resolveFullPath(dirPath);
                 const files: File[] = [];

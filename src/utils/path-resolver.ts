@@ -1,6 +1,7 @@
 import path from 'path';
 import os from 'os';
 import process from 'process';
+import RecFileSystem from '@services/rec-file-system';
 
 // 使用正则表达式解析环境变量
 function resolveEnvVariables(inputPath: string): string {
@@ -29,6 +30,25 @@ export function resolveFullPath(inputPath: string): string {
     
     // 最后解析为绝对路径（如果是相对路径）
     return path.resolve(pathWithEnv);
+}
+
+// resolve relative path to absolute path in rec file system
+export function resolveRecFullPath(rfs: RecFileSystem, inputPath: string): string {
+    const cwd = rfs.pwd();
+    const path = inputPath.startsWith("/") ? inputPath : cwd.stat ? cwd.data + "/" + inputPath : inputPath;
+    // deal with ".." and "." in the path
+    const paths = path.split("/");
+    const resolvedPaths: string[] = [];
+    for (const p of paths) {
+        if (!p || p === ".") continue;
+        if (p === "..") {
+            if (resolvedPaths.length === 0) continue;
+            resolvedPaths.pop();
+            continue;
+        }
+        resolvedPaths.push(p);
+    }
+    return resolvedPaths.join("/");
 }
 
 const escapeMap: {[key: string]: string} = {
