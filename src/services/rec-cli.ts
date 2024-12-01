@@ -26,6 +26,11 @@ const commands: {[key: string]: Command} = {
         usage: "ls [path?]",
         args: 1
     },
+    lsp: {
+        desc: "list files and directories in plain format",
+        usage: "lsp [path?]",
+        args: 1
+    },
     cd: {
         desc: "Change directory",
         usage: "cd [path?]",
@@ -172,6 +177,17 @@ class RecCli {
                     lastModified: { value: f.lastModified }
                 }));
                 console.log(formatter.formatTable(data));
+                break;
+            }
+            case "lsp": {
+                const src = args[0] ?? ".";
+                const ls = await this.rfs.ls(src);
+                if (!ls.stat) {
+                    throw new Error(`ls: ${ls.msg}`);
+                }
+                ls.data.forEach((f) => {
+                    console.log(escapeToShell(f.name + (f.type === "folder" ? "/" : "")));
+                });
                 break;
             }
             case "cd": {
@@ -530,6 +546,7 @@ class RecCli {
         switch (cmd) {
             // len === 1 and only directory
             case "ls":
+            case "lsp":
             case "cd":
             case "mkdir":
             case "rmdir":
