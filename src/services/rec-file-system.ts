@@ -303,6 +303,12 @@ class RecFileSystem {
             msg: `cannot copy to or from recycle`
         };
 
+        // if destFolder is backup, then cp failed
+        if (destPath[0].disk_type === "backup") return {
+            stat: false,
+            msg: `cannot copy to backup`
+        };
+
         // if destFolder is or is subfolder of srcFolder, then cp failed
         if (destPath.length >= srcPath.length && destPath.slice(0, srcPath.length).every((f, i) => f.id === srcPath[i].id)) return {
             stat: false,
@@ -360,6 +366,12 @@ class RecFileSystem {
         if (srcPath[0].disk_type === "recycle" || destPath[0].disk_type === "recycle") return {
             stat: false,
             msg: `cannot move to or from recycle`
+        };
+
+        // if destFolder is backup, then mv failed
+        if (destPath[0].disk_type === "backup") return {
+            stat: false,
+            msg: `cannot move to backup`
         };
         
         // if destFolder is or is subfolder of srcFolder, then mv failed
@@ -465,6 +477,12 @@ class RecFileSystem {
             msg: `cannot restore a file not in recycle or restore to recycle`
         };
 
+        // if destFolder is backup, then restore failed
+        if (destPath[0].disk_type === "backup") return {
+            stat: false,
+            msg: `cannot restore to backup`
+        };
+
         // if groupId is different, then cp failed
         if (srcFile.groupId !== destFolder.groupId) return {
             stat: false,
@@ -559,6 +577,11 @@ class RecFileSystem {
         if (folder === groupRoot) return {
             stat: false,
             msg: `cannot upload to group root folder`
+        };
+        // if path is backupRoot, then upload failed
+        if (folder === backupRoot) return {
+            stat: false,
+            msg: `cannot upload to backup root folder`
         };
         // if path is not a folder, then upload failed
         if (folder.type !== "folder") return {
