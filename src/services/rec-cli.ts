@@ -8,7 +8,7 @@ import { byteToSize } from "@utils/byte-to-size";
 import * as shellQuote from "shell-quote";
 import fs from "fs";
 import { CacheFile, RecFileCache } from "./rec-file-cache";
-import { Readable } from "stream";
+import { Readable, Writable } from "stream";
 
 type Command = {
     desc: string,
@@ -133,7 +133,7 @@ class RecCli {
         this.rl = readline.createInterface({
             // if nonInteractive, use a readable stream that does nothing
             input: nonInteractive ? new Readable({ read() {} }) : process.stdin,
-            output: process.stdout,
+            output: nonInteractive ? new Writable({ write() {} }) : process.stdout,
             prompt: "/> ",
             completer: (line, callback) => this.completer(line, callback),
             terminal: true
