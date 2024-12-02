@@ -68,10 +68,6 @@ export class RecFileCache {
         const path = folderPath.split("/").filter(Boolean);
         let current = this.root;
         for (const name of path) {
-            // if p is empty or p === ".", continue
-            if (name === "." || name === "") continue;
-            // if p === "..", then go back
-            
             // if doesn't exist, do nothing
             if (!current.children) return;
             const next = current.children.find(child => child.name === name);
