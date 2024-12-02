@@ -203,7 +203,7 @@ class RecFileSystem {
                     role: roleIdPairDict[f.number] || roles[0], // get role from privilege, default to 0
                     groupId: group.groupId, // extend groupId
                     // if file, add file extension, otherwise, just name
-                    name: f.type === "file" ? f.name + "." + f.file_ext : f.name,
+                    name: f.type === "folder" ? f.name : f.file_ext ? f.name + "." + f.file_ext : f.name,
                     size: Number(f.bytes),
                     type: f.type,
                     creator: f.creater_user_real_name,
@@ -227,7 +227,7 @@ class RecFileSystem {
                 role: folder.role, // extend role
                 groupId: folder.groupId, // extend groupId
                 // if file, add file extension, otherwise, just name
-                name: f.type === "file" ? f.name + "." + f.file_ext : f.name,
+                name: f.type === "folder" ? f.name : f.file_ext ? f.name + "." + f.file_ext : f.name,
                 size: Number(f.bytes),
                 type: f.type,
                 creator: f.creater_user_real_name,
