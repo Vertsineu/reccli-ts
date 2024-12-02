@@ -395,7 +395,6 @@ class RecAPI {
 
         // check token expired (401)
         if (hasToken && res.status_code === HttpStatusCode.Unauthorized) {
-            // console.log("Token expired, refreshing token...");
             await this.refreshToken();
             res = await this.request(config);
         }
@@ -654,7 +653,6 @@ class RecAPI {
         };
         
         // 1. request for upload token and url
-        console.log("Calculating fingerprint...");
         const res = await this.request<EntityType["uploadByFolderId"]["fail"] | EntityType["uploadByFolderId"]["succeed"]>({
             method: "GET",
             url: `/file/${folderId}`,
@@ -669,11 +667,8 @@ class RecAPI {
         }) as ResponseType;
 
         if (res.status_code === HttpStatusCode.Created) {
-            console.log("File already created, skipping upload");
             return;
         }
-
-        console.log("Uploading file...");
 
         const uploadToken = res.entity.upload_token;
         const uploadChunkSize = Number(res.entity.upload_chunk_size);
@@ -684,7 +679,6 @@ class RecAPI {
         for await (const chunk of fileStream) {
             const uploadParams = res.entity.upload_params[idx++];
             if (!uploadParams) break;
-            console.log(`Uploading chunk ${idx - 1}`);
 
             const uploadUrl = uploadParams[1].value;
             const uploadMethod = uploadParams[2].value;
@@ -708,8 +702,6 @@ class RecAPI {
         if (res2.status_code !== HttpStatusCode.Ok) {
             throw new Error(`Failed to upload by folder id: ${res2.message}`);
         }
-
-        console.log("Upload complete");
     }
 
     /**

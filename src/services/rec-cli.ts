@@ -196,7 +196,7 @@ class RecCli {
                     throw new Error(`ls: ${ls.msg}`);
                 }
                 ls.data.forEach((f) => {
-                    console.log(escapeToShell(f.name + (f.type === "folder" ? "/" : "")));
+                    console.log(f.name + (f.type === "folder" ? "/" : ""));
                 });
                 // update cache
                 this.rfc.updateCacheFolder(resolveRecFullPath(this.rfs, src), ls.data.map(f => ({
