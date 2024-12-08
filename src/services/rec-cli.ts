@@ -133,7 +133,7 @@ class RecCli {
         this.rl = readline.createInterface({
             // if nonInteractive, use a readable stream that does nothing
             input: nonInteractive ? new Readable({ read() {} }) : process.stdin,
-            output: process.stdout,
+            output: nonInteractive ? new Writable({ write() {} }) : process.stdout,
             prompt: "/> ",
             completer: (line, callback) => this.completer(line, callback),
             terminal: true
@@ -196,7 +196,7 @@ class RecCli {
                     throw new Error(`ls: ${ls.msg}`);
                 }
                 ls.data.forEach((f) => {
-                    console.log(escapeToShell(f.name + (f.type === "folder" ? "/" : "")));
+                    console.log(f.name + (f.type === "folder" ? "/" : ""));
                 });
                 // update cache
                 this.rfc.updateCacheFolder(resolveRecFullPath(this.rfs, src), ls.data.map(f => ({
