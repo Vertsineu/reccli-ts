@@ -1,5 +1,5 @@
 import RecAPI, { FileType } from "@services/rec-api";
-import RecFileSystem, { RecFile } from "@services/rec-file-system";
+import RecFileSystem from "@services/rec-file-system";
 import readline, { CompleterResult, Interface } from "readline";
 import { exit } from "process";
 import { escapeToShell, resolveFullPath, resolveRecFullPath, unescapeFromShell } from "@utils/path-resolver";
@@ -7,7 +7,7 @@ import { TableFormatter } from "@utils/table-formatter";
 import { byteToSize } from "@utils/byte-to-size";
 import * as shellQuote from "shell-quote";
 import fs from "fs";
-import { CacheFile, RecFileCache } from "./rec-file-cache";
+import { RecFileCache } from "@services/rec-file-cache";
 import { Readable } from "stream";
 
 type Command = {

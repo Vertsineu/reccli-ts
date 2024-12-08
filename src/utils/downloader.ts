@@ -1,5 +1,5 @@
 import axios from "axios";
-import fs, { write } from "fs";
+import fs from "fs";
 import { Stream } from "stream";
 
 export async function downloadFile(url: string, dest: string) {
