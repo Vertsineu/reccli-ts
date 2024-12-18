@@ -2,14 +2,6 @@
 
 `reccli-ts` is a command-line interface (CLI) for the **Rec Cloud Service**, re-implemented in **TypeScript**. It is a modernized version of the original [reccli](https://github.com/taoky/reccli) project, which was originally written in Python.
 
-## Warning
-
-This project is still under development and is not yet ready for production use. Please use it at your own risk.
-
-## Disclaimer
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-
 ## Features
 
 - **TypeScript Implementation**: The original Python code has been re-written in TypeScript for better performance, type safety, and compatibility with modern JavaScript/TypeScript environments.
@@ -102,6 +94,28 @@ reccli-ts run
 This command will execute the main functionality of the Rec Cloud Service CLI.
 
 You can view the original `reccli` repository [here](https://github.com/taoky/reccli).
+
+## Example
+
+First login using default account:
+
+```bash
+reccli-ts login -d
+```
+
+Then you will be prompted to enter your Student ID and password. This account will be set as default, which means you don't need to type your Student ID when running `reccli-ts`.
+
+Next run reccli-ts:
+
+```bash
+reccli-ts run
+```
+
+This command using default account to login. If you want to login with another account, please first run `reccli-ts login` first to record your account, and then run `reccli-ts run -a <Student ID>` to use this account.
+
+Finally, as expected, you successfully run `reccli-ts` in your computer and you can type `help <command?>` to get all available commands, such as `ls`, `cd`, etc.
+
+Note: The root folders are `cloud`, `backup`, `recycle`, and `group`. They do **NOT** actually exist. However, they correspond to the roots of personal cloud disk, personal backup folder, personal recycle bin, and group folder respectively.
 
 ## Acknowledgements
 
