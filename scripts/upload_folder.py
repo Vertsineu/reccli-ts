@@ -22,11 +22,12 @@ def remote_path_exists(remote_path):
     try:
         # 获取父目录的内容
         result = subprocess.run(
-            f"reccli-ts run -c 'lsp {escape_shell_path(parent_path)}'",
+            f"reccli-ts run -c \"lsp {escape_shell_path(parent_path)}\"",
             shell=True,
             check=True,
             text=True,
-            capture_output=True
+            capture_output=True,
+            encoding="utf-8"
         )
         # 检查是否存在目标文件夹
         items = result.stdout.splitlines()
@@ -44,7 +45,8 @@ def ensure_remote_path(remote_path):
             subprocess.run(
                 f"reccli-ts run -c \"mkdir {escape_shell_path(remote_path)}\"",
                 shell=True,
-                check=True
+                check=True,
+                encoding="utf-8"
             )
             print(f"Created remote directory: {remote_path}")
         except subprocess.CalledProcessError as e:
@@ -61,7 +63,7 @@ def upload_file(local_file_path, remote_file_path):
     try:
         # 上传文件到指定路径
         command = f"reccli-ts run -c \"upload {escape_shell_path(local_file_path)} {escape_shell_path(parent_folder)}\""
-        subprocess.run(command, shell=True, check=True)
+        subprocess.run(command, shell=True, check=True, encoding="utf-8")
         print(f"Uploaded: {local_file_path} -> {remote_file_path}")
     except subprocess.CalledProcessError as e:
         print(f"Error uploading {local_file_path}: {e}")

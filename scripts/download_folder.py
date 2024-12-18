@@ -23,11 +23,12 @@ def get_remote_files(remote_path):
     """
     try:
         result = subprocess.run(
-            f"reccli-ts run -c 'lsp {escape_shell_path(remote_path)}'",
+            f"reccli-ts run -c \"lsp {escape_shell_path(remote_path)}\"",
             shell=True,
             check=True,
             text=True,
-            capture_output=True
+            capture_output=True,
+            encoding="utf-8"
         )
         # 返回按行分割的结果
         return result.stdout.splitlines()
@@ -41,7 +42,7 @@ def download_file(remote_file_path, local_file_path):
     """
     try:
         command = f"reccli-ts run -c \"download {escape_shell_path(remote_file_path)} {escape_shell_path(local_file_path)}\""
-        subprocess.run(command, shell=True, check=True)
+        subprocess.run(command, shell=True, check=True, encoding="utf-8")
         print(f"Downloaded: {remote_file_path} -> {local_file_path}")
     except subprocess.CalledProcessError as e:
         print(f"Error downloading {remote_file_path}: {e}")
