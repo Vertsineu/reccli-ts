@@ -8,7 +8,7 @@ import { byteToSize } from "@utils/byte-to-size";
 import * as shellQuote from "shell-quote";
 import fs from "fs";
 import { RecFileCache } from "@services/rec-file-cache";
-import { Readable } from "stream";
+import { Readable, Writable } from "stream";
 
 type Command = {
     desc: string,
