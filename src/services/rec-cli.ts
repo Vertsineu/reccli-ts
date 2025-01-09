@@ -224,7 +224,7 @@ class RecCli {
                 if (!cp.stat) {
                     throw new Error(`cp: ${cp.msg}`);
                 }
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst), true);
                 break;
             }
             case "mv": {
@@ -237,8 +237,8 @@ class RecCli {
                 if (!mv.stat) {
                     throw new Error(`mv: ${mv.msg}`);
                 }
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, src));
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, src), false);
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst), true);
                 break;
             }
             case "rm": {
@@ -250,7 +250,7 @@ class RecCli {
                 if (!rm.stat) {
                     throw new Error(`rm: ${rm.msg}`);
                 }
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, path));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
                 break;
             }
             case "mkdir": {
@@ -262,7 +262,7 @@ class RecCli {
                 if (!mkdir.stat) {
                     throw new Error(`mkdir: ${mkdir.msg}`);
                 }
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, path));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
                 break;
             }
             case "rmdir": {
@@ -274,7 +274,7 @@ class RecCli {
                 if (!rmdir.stat) {
                     throw new Error(`rmdir: ${rmdir.msg}`);
                 }
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, path));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
                 break;
             }
             case "recycle": {
@@ -286,7 +286,8 @@ class RecCli {
                 if (!recycle.stat) {
                     throw new Error(`recycle: ${recycle.msg}`);
                 }
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, path));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, "/recycle"), true);
                 break;
             }
             case "restore": {
@@ -299,8 +300,8 @@ class RecCli {
                 if (!restore.stat) {
                     throw new Error(`restore: ${restore.msg}`);
                 }
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, src));
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, src), false);
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst), true);
                 break;
             }
             case "rename": {
@@ -313,7 +314,7 @@ class RecCli {
                 if (!rename.stat) {
                     throw new Error(`rename: ${rename.msg}`);
                 }
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, src));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, src), false);
                 break;
             }
             case "upload": {
@@ -326,7 +327,7 @@ class RecCli {
                 if (!upload.stat) {
                     throw new Error(`upload: ${upload.msg}`);
                 }
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst), true);
                 break;
             }
             case "download": {
@@ -351,7 +352,7 @@ class RecCli {
                 if (!save.stat) {
                     throw new Error(`save: ${save.msg}`);
                 }
-                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst));
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst), true);
                 break;
             }
             case "whoami": {

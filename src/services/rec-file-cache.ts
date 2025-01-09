@@ -21,9 +21,9 @@ export class RecFileCache {
 
     // path must be absolute path!
     // path can be file or folder
-    // clear the parent folder of the file
+    // clear the parent folder of the file or folder itself
     // if not exists, clear the root
-    public clearCache(filePath?: string): void {
+    public clearCache(filePath?: string, isFolder?: boolean): void {
         if (!filePath) {
             this.root.children = undefined;
             return;
@@ -31,7 +31,7 @@ export class RecFileCache {
 
         const path = filePath.split("/").filter(Boolean);
         let current = this.root;
-        for (const name of path.slice(0, -1)) {
+        for (const name of isFolder ? path : path.slice(0, -1)) {
             // if doesn't exist, do nothing
             if (!current.children) return;
             const next = current.children.find(child => child.name === name);
