@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsc && tsc-alias",
     "start": "node dist/index.js run",
-    "dev": "ts-node -r tsconfig-paths/register src/index.ts run",
+    "dev": "tsx -r tsconfig-paths/register src/index.ts run",
     "test": "echo \"Error: no test specified\" && exit 1",
     "prepublishOnly": "npm run build"
   },
@@ -24,6 +24,7 @@
     "@types/wcwidth": "^1.0.2",
     "tsc-alias": "^1.8.10",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.19.3",
     "typescript": "^5.6.3"
   },
   "dependencies": {
