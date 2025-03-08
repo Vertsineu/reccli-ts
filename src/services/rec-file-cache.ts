@@ -1,4 +1,4 @@
-import { FileType } from "@services/rec-api"
+import { FileType } from "@services/rec-api.js"
 
 // cache file tree
 export type CacheFile = { 

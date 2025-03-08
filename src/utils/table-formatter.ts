@@ -1,5 +1,5 @@
 import wcwidth from "wcwidth";
-import { color, Color } from "@utils/color-string";
+import { color, Color } from "@utils/color-string.js";
 
 export type ColumnName = string;
 

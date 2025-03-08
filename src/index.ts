@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 
-import RecAPI from "@services/rec-api";
-import * as saver from "@services/rec-user-auth-saver";
-import RecCli from "@services/rec-cli";
+import RecAPI from "@services/rec-api.js";
+import * as saver from "@services/rec-user-auth-saver.js";
+import RecCli from "@services/rec-cli.js";
 import { Command } from "commander";
 import inquirer from "inquirer";
-import { version } from "../package.json";
 import { exit } from "process";
+import { createRequire } from "module";
 
 const program = new Command();
+const version = createRequire(import.meta.url)("../package.json").version;
 
 program
     .name("reccli-ts")

@@ -1,13 +1,13 @@
-import RecAPI, { FileType } from "@services/rec-api";
-import RecFileSystem from "@services/rec-file-system";
+import RecAPI, { FileType } from "@services/rec-api.js";
+import RecFileSystem from "@services/rec-file-system.js";
 import readline, { CompleterResult, Interface } from "readline";
 import { exit } from "process";
-import { escapeToShell, resolveFullPath, resolveRecFullPath, unescapeFromShell } from "@utils/path-resolver";
-import { TableFormatter } from "@utils/table-formatter";
-import { byteToSize } from "@utils/byte-to-size";
+import { escapeToShell, resolveFullPath, resolveRecFullPath, unescapeFromShell } from "@utils/path-resolver.js";
+import { TableFormatter } from "@utils/table-formatter.js";
+import { byteToSize } from "@utils/byte-to-size.js";
 import * as shellQuote from "shell-quote";
 import fs from "fs";
-import { RecFileCache } from "@services/rec-file-cache";
+import { RecFileCache } from "@services/rec-file-cache.js";
 import { Readable, Writable } from "stream";
 
 type Command = {

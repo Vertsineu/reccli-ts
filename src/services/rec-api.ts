@@ -437,8 +437,7 @@ class RecAPI {
     private aesDecrypt(data: string, headerStrip: boolean = true): string {
         const iv = Buffer.from(this.aesKey).reverse();
         const cipher = crypto.createDecipheriv('aes-128-cbc', this.aesKey, iv);
-        let raw = Buffer.concat([cipher.update(Buffer.from(data, 'base64')), cipher.update(Buffer.alloc(16))]);
-        raw = this.unpad(raw);
+        const raw = this.unpad(Buffer.concat([cipher.update(Buffer.from(data, 'base64')), cipher.update(Buffer.alloc(16))]));
 
         if (headerStrip) {
             return raw.subarray(16).toString('utf-8');
