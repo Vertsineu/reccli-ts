@@ -5,10 +5,10 @@ import { exit } from "process";
 import { escapeToShell, resolveFullPath, resolveRecFullPath, unescapeFromShell } from "@utils/path-resolver.js";
 import { TableFormatter } from "@utils/table-formatter.js";
 import { byteToSize } from "@utils/byte-to-size.js";
-import * as shellQuote from "shell-quote";
 import fs from "fs";
 import { RecFileCache } from "@services/rec-file-cache.js";
 import { Readable, Writable } from "stream";
+import { parseShellCommand } from "@utils/shell-parser.js";
 
 type Command = {
     desc: string,
@@ -438,7 +438,7 @@ class RecCli {
             this.interruptCount = 0;
             // 2. parse command and handle error
             try {
-                const [cmd, ...args] = shellQuote.parse(line).map((arg) => arg.toString());
+                const [cmd, ...args] = parseShellCommand(line);
                 await this.parseCommand(cmd, args);
             } catch (err) {
                 if (err instanceof Error) {
@@ -568,7 +568,7 @@ class RecCli {
         };
 
         // 1. first parse the command
-        const [cmd, ...args] = shellQuote.parse(line).map((arg) => arg.toString());
+        const [cmd, ...args] = parseShellCommand(line);
 
         // last arg with possible space
         const lastArgOriginal = escapeToShell(args[args.length - 1] ?? "");
