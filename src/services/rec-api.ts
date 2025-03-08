@@ -135,6 +135,25 @@ export type EntityType = {
             file_id: string
         }
     },
+    operationByIdType: {
+        copy: {
+            job_id: string,
+            run_percent: number,
+            state: number,
+            message: string
+        },
+        move: {
+            folder_names: [
+                {
+                    id: string,
+                    folder_name: string
+                }
+            ]
+        },
+        recycle: [],
+        delete: [],
+        restore: []
+    }
     getUserInfo: {
         user_type: number,
         user_group_id: number,
@@ -712,7 +731,8 @@ class RecAPI {
      * @param groupId group id
      */
     public async operationByIdType(action: ActionType, src: IdTypePairType[], destId: string | undefined, diskType: DiskType, groupId?: string): Promise<void> {
-        const res = await this.request({
+        // although the EntityType differs by action, for convenience, we treat it as if it's on copy action
+        const res = await this.request<EntityType["operationByIdType"]["copy"]>({
             method: "POST",
             url: "/operationFileOrFolder",
             data: {
@@ -726,6 +746,11 @@ class RecAPI {
                 group_number: groupId
             }
         });
+
+        // wait for job if it's copy action
+        if (action == "copy") {
+            this.waitForJob(res.entity.job_id);
+        }
 
         if (res.status_code !== HttpStatusCode.Ok) {
             throw new Error(`Failed to operation by id: ${res.message}`);
@@ -948,22 +973,6 @@ class RecAPI {
         return res.entity;
     }
 
-    private async searchCopyJobResult(jobId: string): Promise<EntityType["searchCopyJobResult"]> {
-        const res = await this.request<EntityType["searchCopyJobResult"]>({
-            method: "POST",
-            url: "/search_copy_job_result",
-            data: {
-                job_id: jobId
-            }
-        });
-
-        if (res.status_code !== HttpStatusCode.Ok) {
-            throw new Error(`Failed to search copy job result: ${res.message}`);
-        }
-
-        return res.entity;
-    }
-
     /**
      * Save file or folder to cloud folder
      * @param src id and type of source files or folders
@@ -992,16 +1001,31 @@ class RecAPI {
         const jobId = res.entity.job_id;
 
         // wait for search copy job result
+        await this.waitForJob(jobId);
+    }
+
+    private async searchCopyJobResult(jobId: string): Promise<EntityType["searchCopyJobResult"]> {
+        const res = await this.request<EntityType["searchCopyJobResult"]>({
+            method: "POST",
+            url: "/search_copy_job_result",
+            data: {
+                job_id: jobId
+            }
+        });
+
+        if (res.status_code !== HttpStatusCode.Ok) {
+            throw new Error(`Failed to search copy job result: ${res.message}`);
+        }
+
+        return res.entity;
+    }
+
+    private async waitForJob(jobId: string): Promise<void> {
         let job = await this.searchCopyJobResult(jobId);
         while (job.state !== 2) {
             await new Promise(resolve => setTimeout(resolve, 200));
             job = await this.searchCopyJobResult(jobId);
         }
-
-        if (job.state !== 2) {
-            throw new Error(`Failed to save to cloud: ${job.message}`);
-        }
-
     }
 
 }
