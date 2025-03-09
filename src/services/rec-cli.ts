@@ -24,97 +24,97 @@ type CompletionResult = {
 
 const commands: {[key: string]: Command} = {
     ls: {
-        desc: "List files and directories",
-        usage: "ls [path?]",
+        desc: "List files and folders in the given folder, default is current folder",
+        usage: "ls [folder]",
         args: 1
     },
     lsp: {
-        desc: "list files and directories in plain format",
-        usage: "lsp [path?]",
+        desc: "list files and folders in plain format in the given folder, default is current folder",
+        usage: "lsp [folder]",
         args: 1
     },
     cd: {
-        desc: "Change directory",
-        usage: "cd [path?]",
+        desc: "change current folder to the given folder, default is root folder",
+        usage: "cd [folder]",
         args: 1
     },
     cp: {
-        desc: "Copy file or directory in the same cloud or group",
-        usage: "cp [src] [dst]",
+        desc: "copy file or folder to another folder in the same cloud or group",
+        usage: "cp <file|folder> <folder>",
         args: 2
     },
     mv: {
-        desc: "Move file or directory in the same cloud or group",
-        usage: "mv [src] [dst]",
+        desc: "move file or folder to another folder in the same cloud or group",
+        usage: "mv <file|folder> <folder>",
         args: 2
     },
     rm: {
-        desc: "Remove file or directory",
-        usage: "rm [path]",
+        desc: "remove file or folder in the cloud or group",
+        usage: "rm <file|folder>",
         args: 1
     },
     mkdir: {
-        desc: "Make directory",
-        usage: "mkdir [path]",
+        desc: "create a new folder",
+        usage: "mkdir <folder>",
         args: 1
     },
     rmdir: {
-        desc: "Remove directory",
-        usage: "rmdir [path]",
+        desc: "remove the folder",
+        usage: "rmdir <folder>",
         args: 1
     },
     recycle: {
-        desc: "Move file or directory from cloud to recycle bin",
-        usage: "recycle [path]",
+        desc: "move file or folder from cloud to recycle bin",
+        usage: "recycle <file|folder>",
         args: 1
     },
     restore: {
-        desc: "Restore file or directory from recycle bin to cloud",
-        usage: "restore [src] [dst]",
+        desc: "restore file or folder in recycle bin to a folder in the cloud",
+        usage: "restore /recycle/<file|folder> <folder>",
         args: 2
     },
     rename: {
-        desc: "Rename file or directory",
-        usage: "rename [src] [name]",
+        desc: "rename file or folder",
+        usage: "rename <file|folder> <name>",
         args: 2
     },
     upload: {
-        desc: "Upload file from disk to cloud",
-        usage: "upload [src] [dst]",
+        desc: "upload file from disk to cloud",
+        usage: "upload <file> <folder>",
         args: 2
     },
     download: {
-        desc: "Download file from cloud to disk",
-        usage: "download [src] [dst]",
+        desc: "download file from cloud to disk",
+        usage: "download <file> <folder>",
         args: 2
     },
     save: {
-        desc: "Save file from group to cloud",
-        usage: "save [src] [dst]",
+        desc: "save file or folder from group to cloud",
+        usage: "save <file|folder> <folder>",
         args: 2
     },
     whoami: {
-        desc: "Show information about the current user",
+        desc: "display information about the current user",
         usage: "whoami",
         args: 0
     },
     groups: {
-        desc: "Show information about the groups",
+        desc: "display information about the groups the current user is in",
         usage: "groups",
         args: 0
     },
     df: {
-        desc: "Show cloud and group disk usage",
+        desc: "display cloud and group disk usage",
         usage: "df",
         args: 0
     },
     help: {
-        desc: "Show help information",
+        desc: "display help information",
         usage: "help [command?]",
         args: 1
     },
     exit: {
-        desc: "Exit the program",
+        desc: "exit the program",
         usage: "exit",
         args: 0
     },
