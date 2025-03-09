@@ -657,7 +657,7 @@ class RecFileSystem {
             const stats = fs.statSync(dest);
             if (stats.isDirectory()) {
                 // if dest is a folder, then download with the name of src
-                dest = dest + (dest.endsWith(sep) ? "" : sep) + file.name;
+                dest = dest + (dest.endsWith("/") ? "" : "/") + file.name;
                 // touch the file
                 fs.closeSync(fs.openSync(dest, "w"));
             }
