@@ -110,7 +110,7 @@ const commands: {[key: string]: Command} = {
     },
     help: {
         desc: "display help information",
-        usage: "help [command?]",
+        usage: "help [command]",
         args: 1
     },
     exit: {
