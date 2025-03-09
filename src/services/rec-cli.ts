@@ -24,7 +24,7 @@ type CompletionResult = {
 
 const commands: {[key: string]: Command} = {
     ls: {
-        desc: "List files and folders in the given folder, default is current folder",
+        desc: "list files and folders in the given folder, default is current folder",
         usage: "ls [folder]",
         args: 1
     },
