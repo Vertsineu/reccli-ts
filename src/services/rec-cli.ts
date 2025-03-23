@@ -153,6 +153,9 @@ class RecCli {
     }
 
     private async parseCommand(cmd: string, args: string[]): Promise<void> {
+        // if cmd is undefined, return
+        if (!cmd) return;
+
         // if not in commands, throw error
         if (!(cmd in commands)) {
             throw new Error(`Unknown command: ${cmd}`);
