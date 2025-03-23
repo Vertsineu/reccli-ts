@@ -1,7 +1,6 @@
 import RecAPI, { DiskType, FileType } from "@services/rec-api.js";
 import fs from "fs";
 import { downloadFile } from "@utils/downloader.js";
-import { sep } from "path";
 
 export type Role = {
     label: string,

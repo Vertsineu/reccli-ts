@@ -113,6 +113,11 @@ const commands: {[key: string]: Command} = {
         usage: "help [command]",
         args: 1
     },
+    clear: {
+        desc: "clear the screen",
+        usage: "clear",
+        args: 0
+    },
     exit: {
         desc: "exit the program",
         usage: "exit",
@@ -390,9 +395,6 @@ class RecCli {
                 console.log(`Group disk usage: ${byteToSize(df.data.group.usedBytes)} / ${byteToSize(df.data.group.totalBytes)}`);
                 break;
             }
-            case "exit": {
-                exit(0);
-            }
             case "help": {
                 const cmd = args[0];
                 if (cmd) {
@@ -413,6 +415,13 @@ class RecCli {
                     }
                 }
                 break;
+            }
+            case "clear": {
+                console.clear();
+                break;
+            }
+            case "exit": {
+                exit(0);
             }
             default: {
                 throw new Error(`Unknown command: ${cmd}`);
