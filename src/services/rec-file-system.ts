@@ -564,6 +564,8 @@ class RecFileSystem {
         };
     }
 
+    // dest must be a folder
+    // upload src file to dest folder
     public async upload(src: string, dest: string): Promise<RetType<void>> {
         const path = await this.calcPath(dest);
         // if path is null or path is root, then upload failed
@@ -593,13 +595,16 @@ class RecFileSystem {
             msg: `no upload permission`
         };
 
-        // if src is not a file, then upload failed
         try {
+            // if src does not exist, then upload failed
+            if (!fs.existsSync(src)) {
+                throw new Error(`${src} not found`);
+            }
             const stats = fs.statSync(src);
-            if (!stats.isFile()) return {
-                stat: false,
-                msg: `${src} is not a file`
-            };
+            // if src is not a file, then upload failed
+            if (!stats.isFile()) {
+                throw new Error(`${src} is not a file`);
+            }
         } catch (e) {
             return {
                 stat: false,
@@ -615,9 +620,8 @@ class RecFileSystem {
         };
     }
 
-    // dest can be a file or a folder
-    // if dest is a folder, treat as a folder, download with the name of src
-    // if dest not exist, try make a file, if failed, then download failed
+    // dest must be a folder
+    // download src file to dest folder
     public async download(src: string, dest: string): Promise<RetType<void>> {
         const path = await this.calcPath(src);
         // if path is null or path is root, then download failed
@@ -647,19 +651,20 @@ class RecFileSystem {
             msg: `no download permission`
         };
 
-        // if dest is not a folder, then download failed
         try {
+            // if dest does not exist, then download failed
             if (!fs.existsSync(dest)) {
-                // if dest not exist, try make a file
-                fs.closeSync(fs.openSync(dest, "w"));
+                throw new Error(`${dest} not found`);
             }
             const stats = fs.statSync(dest);
-            if (stats.isDirectory()) {
-                // if dest is a folder, then download with the name of src
-                dest = dest + (dest.endsWith("/") ? "" : "/") + file.name;
-                // touch the file
-                fs.closeSync(fs.openSync(dest, "w"));
+            // if dest is not a directory, then download failed
+            if (!stats.isDirectory()) {
+                throw new Error(`${dest} is not a folder`);
             }
+            // if dest is a folder, then download with the name of src
+            dest = dest + (dest.endsWith("/") ? "" : "/") + file.name;
+            // touch the file
+            fs.closeSync(fs.openSync(dest, "w"));
         } catch (e) {
             return {
                 stat: false,
