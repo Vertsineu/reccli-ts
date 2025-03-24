@@ -1,7 +1,12 @@
 import RecAPI, { DiskType, FileType } from "@services/rec-api.js";
 import fs from "fs";
-import path from "path";
 import { downloadFile } from "@utils/downloader.js";
+import { DownloadTask, DownloadWorkerMessage } from "./workers/download-worker.js";
+import { Worker } from "worker_threads";
+import path from 'path';
+import { fileURLToPath } from "url";
+
+const dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export type Role = {
     label: string,
@@ -25,7 +30,7 @@ export const roles = [
 
 export type RecFile = {
     id: string,
-    disk_type: DiskType,
+    diskType: DiskType,
     role: Role,
     groupId?: string,
 
@@ -42,7 +47,7 @@ export type RetType<T> =
 
 const cloudRoot: RecFile = {
     id: "0",
-    disk_type: "cloud",
+    diskType: "cloud",
     role: roles[1],
 
     name: "cloud",
@@ -53,7 +58,7 @@ const cloudRoot: RecFile = {
 };
 const recycleRoot: RecFile = {
     id: "0",
-    disk_type: "recycle",
+    diskType: "recycle",
     role: roles[0],
 
     name: "recycle",
@@ -64,7 +69,7 @@ const recycleRoot: RecFile = {
 };
 const backupRoot: RecFile = {
     id: "0",
-    disk_type: "backup",
+    diskType: "backup",
     role: roles[1],
 
     name: "backup",
@@ -75,7 +80,7 @@ const backupRoot: RecFile = {
 };
 const groupRoot: RecFile = {
     id: "0",
-    disk_type: "cloud",
+    diskType: "cloud",
     role: roles[0],
 
     name: "group",
@@ -168,7 +173,7 @@ class RecFileSystem {
                 stat: true,
                 data: groups.datas.map(g => ({
                     id: "0",
-                    disk_type: "cloud",
+                    diskType: "cloud",
                     role: roles[0],
                     groupId: g.group_number,
 
@@ -183,7 +188,7 @@ class RecFileSystem {
         // 如果当前目录是 /group/xxx/，则需要获取权限
         if (cwd.length == 2 && cwd[0] == groupRoot) {
             const group = cwd[1]; // current group
-            const folders = await this.api.listById(group.id, group.disk_type, group.groupId);
+            const folders = await this.api.listById(group.id, group.diskType, group.groupId);
             // array of roles
             const roleIdPairArray: {id: string, role: Role}[] = (await this.api.getPrivilegeByGroupId(group.groupId!)).resource_operations.map(r => ({
                 id: r.folder_id,
@@ -199,7 +204,7 @@ class RecFileSystem {
                 stat: true,
                 data: folders.datas.map(f => ({
                     id: f.number,
-                    disk_type: f.disk_type,
+                    diskType: f.disk_type,
                     role: roleIdPairDict[f.number] || roles[0], // get role from privilege, default to 0
                     groupId: group.groupId, // extend groupId
                     // if file, add file extension, otherwise, just name
@@ -218,12 +223,12 @@ class RecFileSystem {
 
         // get current folder id
         const folder = cwd[cwd.length - 1];
-        const files = await this.api.listById(folder.id, folder.disk_type, folder.groupId);
+        const files = await this.api.listById(folder.id, folder.diskType, folder.groupId);
         return {
             stat: true,
             data: files.datas.map(f => ({
                 id: f.number,
-                disk_type: f.disk_type,
+                diskType: f.disk_type,
                 role: folder.role, // extend role
                 groupId: folder.groupId, // extend groupId
                 // if file, add file extension, otherwise, just name
@@ -298,13 +303,13 @@ class RecFileSystem {
         };
 
         // if srcFile or destFolder is recycle, then cp failed, you should use restore or recycle
-        if (srcPath[0].disk_type === "recycle" || destPath[0].disk_type === "recycle") return {
+        if (srcPath[0].diskType === "recycle" || destPath[0].diskType === "recycle") return {
             stat: false,
             msg: `cannot copy to or from recycle`
         };
 
         // if destFolder is backup, then cp failed
-        if (destPath[0].disk_type === "backup") return {
+        if (destPath[0].diskType === "backup") return {
             stat: false,
             msg: `cannot copy to backup`
         };
@@ -315,7 +320,7 @@ class RecFileSystem {
             msg: `cannot copy to or into subfolder`
         };
 
-        await this.api.operationByIdType("copy", [{id: srcFile.id, type: srcFile.type}], destFolder.id, destFolder.disk_type, destFolder.groupId);
+        await this.api.operationByIdType("copy", [{id: srcFile.id, type: srcFile.type}], destFolder.id, destFolder.diskType, destFolder.groupId);
 
         return {
             stat: true,
@@ -363,13 +368,13 @@ class RecFileSystem {
         };
 
         // if srcFile or destFolder is recycle, then mv failed, you should use restore or recycle
-        if (srcPath[0].disk_type === "recycle" || destPath[0].disk_type === "recycle") return {
+        if (srcPath[0].diskType === "recycle" || destPath[0].diskType === "recycle") return {
             stat: false,
             msg: `cannot move to or from recycle`
         };
 
         // if destFolder is backup, then mv failed
-        if (destPath[0].disk_type === "backup") return {
+        if (destPath[0].diskType === "backup") return {
             stat: false,
             msg: `cannot move to backup`
         };
@@ -380,7 +385,7 @@ class RecFileSystem {
             msg: `cannot move to or into subfolder`
         };
 
-        await this.api.operationByIdType("move", [{id: srcFile.id, type: srcFile.type}], destFolder.id, destFolder.disk_type, destFolder.groupId);
+        await this.api.operationByIdType("move", [{id: srcFile.id, type: srcFile.type}], destFolder.id, destFolder.diskType, destFolder.groupId);
 
         return {
             stat: true,
@@ -402,7 +407,7 @@ class RecFileSystem {
             msg: `cannot remove root folder or group root folder`
         };
 
-        await this.api.operationByIdType("delete", [{id: file.id, type: file.type}], undefined, file.disk_type, file.groupId);
+        await this.api.operationByIdType("delete", [{id: file.id, type: file.type}], undefined, file.diskType, file.groupId);
         
         return {
             stat: true,
@@ -424,7 +429,7 @@ class RecFileSystem {
             msg: `cannot recycle root folder or group root folder`
         };
         // if path in recycle, then recycle failed
-        if (path[0].disk_type === "recycle") return {
+        if (path[0].diskType === "recycle") return {
             stat: false,
             msg: `cannot recycle a file in recycle`
         };
@@ -435,7 +440,7 @@ class RecFileSystem {
         };
 
 
-        await this.api.operationByIdType("recycle", [{id: file.id, type: file.type}], undefined, file.disk_type, file.groupId);
+        await this.api.operationByIdType("recycle", [{id: file.id, type: file.type}], undefined, file.diskType, file.groupId);
         
         return {
             stat: true,
@@ -472,13 +477,13 @@ class RecFileSystem {
         };
 
         // if srcFile is not in recycle or destFolder is in recycle, then restore failed
-        if (srcPath[0].disk_type !== "recycle" || destFolder.disk_type === "recycle") return {
+        if (srcPath[0].diskType !== "recycle" || destFolder.diskType === "recycle") return {
             stat: false,
             msg: `cannot restore a file not in recycle or restore to recycle`
         };
 
         // if destFolder is backup, then restore failed
-        if (destPath[0].disk_type === "backup") return {
+        if (destPath[0].diskType === "backup") return {
             stat: false,
             msg: `cannot restore to backup`
         };
@@ -489,7 +494,7 @@ class RecFileSystem {
             msg: `cannot restore between different groups`
         };
 
-        await this.api.operationByIdType("restore", [{id: srcFile.id, type: srcFile.type}], destFolder.id, destFolder.disk_type, destFolder.groupId);
+        await this.api.operationByIdType("restore", [{id: srcFile.id, type: srcFile.type}], destFolder.id, destFolder.diskType, destFolder.groupId);
 
         return {
             stat: true,
@@ -545,7 +550,7 @@ class RecFileSystem {
             msg: `${path} not found`
         };
         // if cwd is in recycle, then mkdir failed
-        if (cwd[0].disk_type === "recycle") return {
+        if (cwd[0].diskType === "recycle") return {
             stat: false,
             msg: `cannot make folder in recycle`
         };
@@ -557,7 +562,7 @@ class RecFileSystem {
             msg: `cannot make folder in group root folder`
         };
 
-        await this.api.mkdirByFolderIds(file.id, [name], file.disk_type, file.groupId);
+        await this.api.mkdirByFolderIds(file.id, [name], file.diskType, file.groupId);
 
         return {
             stat: true,
@@ -623,7 +628,7 @@ class RecFileSystem {
             };
         }
 
-        await this.api.uploadByFolderId(folder.id, src, folder.disk_type, folder.groupId);
+        await this.api.uploadByFolderId(folder.id, src, folder.diskType, folder.groupId);
 
         return {
             stat: true,
@@ -646,13 +651,8 @@ class RecFileSystem {
             stat: false,
             msg: `cannot download root folder or group root folder`
         };
-        // if path is a folder, then download failed
-        if (file.type === "folder") return {
-            stat: false,
-            msg: `${src} is a folder`
-        };
         // if path is in recycle, then download failed
-        if (path[0].disk_type === "recycle") return {
+        if (path[0].diskType === "recycle") return {
             stat: false,
             msg: `cannot download a file in recycle`
         };
@@ -681,8 +681,6 @@ class RecFileSystem {
 
             // if dest is a folder, then download with the name of src
             dest = dest + (dest.endsWith("/") ? "" : "/") + file.name;
-            // touch the file
-            fs.closeSync(fs.openSync(dest, "w"));
         } catch (e) {
             return {
                 stat: false,
@@ -690,11 +688,83 @@ class RecFileSystem {
             };
         }
 
-        const dict = await this.api.getDownloadUrlByIds([file.id], file.groupId);
-        const url = dict[file.id];
+        if (file.type === "file") {
+            const dict = await this.api.getDownloadUrlByIds([file.id], file.groupId);
+            const url = dict[file.id];
+    
+            // download file using url
+            await downloadFile(url, dest);
+        } else if (file.type === "folder") {
+            // multithread download using worker_thread
+            const count = 8;
+            // construct workers
+            const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/download-worker.js", { workerData: { auth: this.api.getUserAuth() } }));            
+            
+            // construct ready flag array
+            const ready = new Array(count).fill(true);
 
-        // download file using url
-        await downloadFile(url, dest);
+            // construct root task
+            const task: DownloadTask = {
+                id: file.id,
+                diskType: file.diskType,
+                groupId: file.groupId,
+                type: file.type,
+                path: dest
+            }
+
+            // construct task queue
+            const queue: DownloadTask[] = [];
+
+            // construct promise for all task finish
+            const finished = new Promise<void>((resolve, reject) => {
+                // deal with message from worker
+                workers.forEach(worker => {
+                    worker.on("message", (msg: DownloadWorkerMessage) => {
+                        const { type } = msg;
+                        if (type === "finish") {
+                            // set ready flag
+                            ready[msg.index] = true;
+                            // add tasks to queue
+                            queue.push(...msg.tasks);
+
+                            // try to allocate tasks to all ready workers
+                            while (queue.length > 0) {
+                                const task = queue.shift();
+                                const index = ready.indexOf(true);
+                                if (index === -1) return;
+                                ready[index] = false;
+                                worker.postMessage({ type: "task", index: index, task: task });
+                            }
+
+                            // task queue is empty, then check if it is all finished
+                            if (ready.some(r => !r)) return;
+
+                            // if all finished, then stop all workers 
+                            workers.forEach(w => {
+                                w.postMessage({ type: "exit" })
+                                w.terminate();
+                            });
+                            resolve();
+                        } else if (type === "error") {
+                            // if error, then stop all workers
+                            workers.forEach(w => {
+                                w.postMessage({ type: "exit" })
+                                w.terminate();
+                            });
+                            // and then throw error
+                            reject(msg.error);
+                        }
+                    });
+                });
+            });
+
+            // start the first task
+            ready[0] = false;
+            workers[0].postMessage({ type: "task", index: 0, task: task });
+
+            // wait for all finished
+            await finished;
+        }
 
         return {
             stat: true,
@@ -723,7 +793,7 @@ class RecFileSystem {
             msg: `${dest} not found`
         };
         // if path is not in cloud, then save failed
-        if (destPath[0].disk_type !== "cloud") return {
+        if (destPath[0].diskType !== "cloud") return {
             stat: false,
             msg: `${dest} is not in cloud`
         };

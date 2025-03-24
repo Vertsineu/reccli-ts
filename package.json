@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc && tsc-alias",
     "start": "node dist/index.js run",
-    "dev": "tsx -r tsconfig-paths/register src/index.ts run",
+    "dev": "tsc && tsc-alias && node dist/index.js run",
     "test": "echo \"Error: no test specified\" && exit 1",
     "prepublishOnly": "npm run build"
   },
@@ -20,7 +20,7 @@
   "devDependencies": {
     "@types/commander": "^2.12.0",
     "@types/inquirer": "^9.0.7",
-    "@types/node": "^22.9.0",
+    "@types/node": "^22.13.11",
     "@types/shell-quote": "^1.7.5",
     "@types/wcwidth": "^1.0.2",
     "tsc-alias": "^1.8.10",

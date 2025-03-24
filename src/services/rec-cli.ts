@@ -84,8 +84,8 @@ const commands: {[key: string]: Command} = {
         args: 2
     },
     download: {
-        desc: "download file from cloud to disk",
-        usage: "download <file> <folder>",
+        desc: "download file or folder from cloud to disk",
+        usage: "download <file|folder> <folder>",
         args: 2
     },
     save: {

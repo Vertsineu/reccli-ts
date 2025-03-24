@@ -391,6 +391,14 @@ class RecAPI {
     }
 
     /**
+     * Get user auth
+     * @returns user auth
+     */
+    public getUserAuth(): UserAuth {
+        return this.userAuth;
+    }
+
+    /**
      * Send a request with config
      * @param config request config
      * @returns response data
@@ -619,7 +627,7 @@ class RecAPI {
 
         return new Promise<string>((resolve, reject) => {
             readStream
-                .on("data", (chunk: Buffer) => {
+                .on("data", (chunk: string | Buffer) => {
                     // 对每个块计算 MD5
                     const chunkHash = crypto.createHash("md5").update(chunk).digest("hex");
                     chunkHashes.push(chunkHash);
