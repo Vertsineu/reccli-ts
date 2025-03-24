@@ -153,7 +153,22 @@ export type EntityType = {
         recycle: [],
         delete: [],
         restore: []
-    }
+    },
+    mkdirByFolderIds: [
+        {
+            parent_number: string,
+            number: string,
+            name: string,
+            new_name: string,
+            last_update_date: string,
+            log_data_info: {
+                folder_id: string,
+                folder_pid: string,
+                folder_name: string,
+                folder_path: string
+            }
+        }
+    ]
     getUserInfo: {
         user_type: number,
         user_group_id: number,
@@ -662,6 +677,8 @@ class RecAPI {
             fileStat = fs.statSync(filePath);
             if (fileStat.isDirectory()) {
                 throw new Error("Cannot upload a directory");
+            } else if (fileStat.size === 0) {
+                throw new Error("Cannot upload an empty file");
             }
         } catch (err) {
             throw err;
@@ -817,8 +834,8 @@ class RecAPI {
      * @param diskType cloud: personal cloud, backup: backup directory
      * @param groupId group id
      */
-    public async mkdirByFolderIds(folderId: string, names: string[], diskType: DiskType, groupId?: string): Promise<void> {
-        const res = await this.request({
+    public async mkdirByFolderIds(folderId: string, names: string[], diskType: DiskType, groupId?: string): Promise<EntityType["mkdirByFolderIds"]> {
+        const res = await this.request<EntityType["mkdirByFolderIds"]>({
             method: "POST",
             url: "/folder/tree",
             data: {
@@ -832,6 +849,8 @@ class RecAPI {
         if (res.status_code !== HttpStatusCode.Ok) {
             throw new Error(`Failed to mkdir by folder id: ${res.message}`);
         }
+
+        return res.entity;
     }
 
     /**

@@ -61,7 +61,7 @@ parentPort!.on("message", async (msg: DownloadWorkerMessage) => {
                     diskType: f.disk_type,
                     groupId: groupId, // extend groupId from parent task
                     type: f.type,
-                    path: (path.endsWith("/") ? path : path + "/") + (f.type === "folder" ? f.name : f.file_ext ? f.name + "." + f.file_ext : f.name)
+                    path: path + "/" + (f.type === "folder" ? f.name : f.file_ext ? f.name + "." + f.file_ext : f.name)
                 }));
                 
                 // return tasks
@@ -74,6 +74,7 @@ parentPort!.on("message", async (msg: DownloadWorkerMessage) => {
                 // execute task
                 const dict = await api.getDownloadUrlByIds([id], groupId);
                 const url = dict[id];
+                console.log(`[INFO] ${path}: downloading`);
                 await downloadFile(url, path);
 
                 // return empty tasks

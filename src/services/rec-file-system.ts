@@ -5,6 +5,7 @@ import { DownloadTask, DownloadWorkerMessage } from "./workers/download-worker.j
 import { Worker } from "worker_threads";
 import path from 'path';
 import { fileURLToPath } from "url";
+import { UploadTask, UploadWorkerMessage } from "./workers/upload-worker.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -601,17 +602,14 @@ class RecFileSystem {
             msg: `no upload permission`
         };
 
+        // remove trailing slash
+        src = src.replace(/\/$/, "");
+
         try {
             // if src does not exist, then upload failed
             if (!fs.existsSync(src)) {
                 throw new Error(`${src} not found`);
             }
-            const stats = fs.statSync(src);
-            // if src is not a file, then upload failed
-            if (!stats.isFile()) {
-                throw new Error(`${src} is not a file`);
-            }
-
             // if dest contains file with the same name, then upload failed
             const files = await this.lsc(path);
             if (!files.stat) {
@@ -628,7 +626,89 @@ class RecFileSystem {
             };
         }
 
-        await this.api.uploadByFolderId(folder.id, src, folder.diskType, folder.groupId);
+        try {
+            const stats = fs.statSync(src);
+
+            if (stats.isFile()) {
+                await this.api.uploadByFolderId(folder.id, src, folder.diskType, folder.groupId);
+            } else if (stats.isDirectory()) {
+                // multithread upload using worker_thread
+                const count = 8;
+                // construct workers
+                const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/upload-worker.js", { workerData: { auth: this.api.getUserAuth() } }));
+
+                // construct ready flag array
+                const ready = new Array(count).fill(true);
+
+                // construct root task
+                const task: UploadTask = {
+                    folderId: folder.id,
+                    diskType: folder.diskType,
+                    groupId: folder.groupId,
+                    type: folder.type,
+                    path: src
+                };
+
+                // construct task queue
+                const queue: UploadTask[] = [];
+
+                // construct promise for all task finish
+                const finished = new Promise<void>((resolve, reject) => {
+                    // deal with message from worker
+                    workers.forEach(worker => {
+                        worker.on("message", (msg: UploadWorkerMessage) => {
+                            const { type } = msg;
+                            if (type === "finish") {
+                                // set ready flag
+                                ready[msg.index] = true;
+                                // add tasks to queue
+                                queue.push(...msg.tasks);
+
+                                // try to allocate tasks to all ready workers
+                                while (queue.length > 0) {
+                                    const index = ready.indexOf(true);
+                                    if (index === -1) return;
+                                    const task = queue.shift(); 
+                                    ready[index] = false;
+                                    worker.postMessage({ type: "task", index: index, task: task });
+                                }
+
+                                // task queue is empty, then check if it is all finished
+                                if (ready.some(r => !r)) return;
+
+                                // if all finished, then stop all workers 
+                                workers.forEach(w => {
+                                    w.postMessage({ type: "exit" })
+                                    w.terminate();
+                                });
+                                resolve();
+                            } else if (type === "error") {
+                                // if error, then stop all workers
+                                workers.forEach(w => {
+                                    w.postMessage({ type: "exit" })
+                                    w.terminate();
+                                });
+                                // and then throw error
+                                reject(msg.error);
+                            }
+                        });
+                    });
+                });
+
+                // start the first task
+                ready[0] = false;
+                workers[0].postMessage({ type: "task", index: 0, task: task });
+
+                // wait for all finished
+                await finished;
+            }
+            
+        } catch (e) {
+            return {
+                stat: false,
+                msg: String(e)
+            };
+        }
 
         return {
             stat: true,
@@ -662,6 +742,9 @@ class RecFileSystem {
             msg: `no download permission`
         };
 
+        // remove trailing slash
+        dest = dest.replace(/\/$/, "");
+
         try {
             // if dest does not exist, then download failed
             if (!fs.existsSync(dest)) {
@@ -680,7 +763,7 @@ class RecFileSystem {
             }
 
             // if dest is a folder, then download with the name of src
-            dest = dest + (dest.endsWith("/") ? "" : "/") + file.name;
+            dest = dest + "/" + file.name;
         } catch (e) {
             return {
                 stat: false,
@@ -729,9 +812,9 @@ class RecFileSystem {
 
                             // try to allocate tasks to all ready workers
                             while (queue.length > 0) {
-                                const task = queue.shift();
                                 const index = ready.indexOf(true);
                                 if (index === -1) return;
+                                const task = queue.shift();
                                 ready[index] = false;
                                 worker.postMessage({ type: "task", index: index, task: task });
                             }
