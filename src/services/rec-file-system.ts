@@ -1,5 +1,6 @@
 import RecAPI, { DiskType, FileType } from "@services/rec-api.js";
 import fs from "fs";
+import path from "path";
 import { downloadFile } from "@utils/downloader.js";
 
 export type Role = {
@@ -605,6 +606,16 @@ class RecFileSystem {
             if (!stats.isFile()) {
                 throw new Error(`${src} is not a file`);
             }
+
+            // if dest contains file with the same name, then upload failed
+            const files = await this.lsc(path);
+            if (!files.stat) {
+                throw new Error(`cannot list files in ${dest}`);
+            }
+            const name = src.split("/").pop();
+            if (files.data.some(f => f.name === name)) {
+                throw new Error(`file with the same name exists in ${dest}`);
+            }
         } catch (e) {
             return {
                 stat: false,
@@ -661,6 +672,13 @@ class RecFileSystem {
             if (!stats.isDirectory()) {
                 throw new Error(`${dest} is not a folder`);
             }
+
+            // if dest contains file with the same name, then download failed
+            const files = fs.readdirSync(dest);
+            if (files.some(f => f === file.name)) {
+                throw new Error(`file with the same name exists in ${dest}`);
+            }
+
             // if dest is a folder, then download with the name of src
             dest = dest + (dest.endsWith("/") ? "" : "/") + file.name;
             // touch the file
