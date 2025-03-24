@@ -6,7 +6,7 @@ export async function downloadFile(url: string, dest: string) {
     const response = await axios<Stream>({
         method: 'GET',
         url: url,
-        responseType: 'stream', // 设置响应类型为 stream
+        responseType: 'stream', // set response type as 'stream'
     });
 
     const writer = fs.createWriteStream(dest);

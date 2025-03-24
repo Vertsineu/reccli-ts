@@ -226,7 +226,7 @@ class RecCli {
                 const src = args[0];
                 const dst = args[1];
                 if (!src || !dst) {
-                    throw new Error("usage: cp src dst");
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
                 const cp = await this.rfs.cp(src, dst);
                 if (!cp.stat) {
@@ -239,7 +239,7 @@ class RecCli {
                 const src = args[0];
                 const dst = args[1];
                 if (!src || !dst) {
-                    throw new Error("usage: mv src dst");
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
                 const mv = await this.rfs.mv(src, dst);
                 if (!mv.stat) {
@@ -252,7 +252,7 @@ class RecCli {
             case "rm": {
                 const path = args[0];
                 if (!path) {
-                    throw new Error("usage: rm path");
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
                 const rm = await this.rfs.rm(path);
                 if (!rm.stat) {
@@ -264,7 +264,7 @@ class RecCli {
             case "mkdir": {
                 const path = args[0];
                 if (!path) {
-                    throw new Error("usage: mkdir path");
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
                 const mkdir = await this.rfs.mkdir(path);
                 if (!mkdir.stat) {
@@ -276,7 +276,7 @@ class RecCli {
             case "rmdir": {
                 const path = args[0];
                 if (!path) {
-                    throw new Error("usage: rmdir path");
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
                 const rmdir = await this.rfs.rm(path ?? "");
                 if (!rmdir.stat) {
@@ -288,7 +288,7 @@ class RecCli {
             case "recycle": {
                 const path = args[0];
                 if (!path) {
-                    throw new Error("usage: recycle path");
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
                 const recycle = await this.rfs.recycle(path);
                 if (!recycle.stat) {
@@ -302,7 +302,7 @@ class RecCli {
                 const src = args[0];
                 const dst = args[1];
                 if (!src || !dst) {
-                    throw new Error("usage: restore src dst");
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
                 const restore = await this.rfs.restore(src, dst);
                 if (!restore.stat) {
@@ -316,7 +316,7 @@ class RecCli {
                 const src = args[0];
                 const name = args[1];
                 if (!src || !name) {
-                    throw new Error("usage: rename src name");
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
                 const rename = await this.rfs.rename(src, name);
                 if (!rename.stat) {
@@ -329,7 +329,7 @@ class RecCli {
                 const src = args[0];
                 const dst = args[1];
                 if (!src || !dst) {
-                    throw new Error("usage: upload src dst");
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
                 const upload = await this.rfs.upload(resolveFullPath(src), dst);
                 if (!upload.stat) {
@@ -342,7 +342,7 @@ class RecCli {
                 const src = args[0];
                 const dst = args[1];
                 if (!src || !dst) {
-                    throw new Error("usage: download src dst");
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
                 const download = await this.rfs.download(src, resolveFullPath(dst));
                 if (!download.stat) {
@@ -354,7 +354,7 @@ class RecCli {
                 const src = args[0];
                 const dst = args[1];
                 if (!src || !dst) {
-                    throw new Error("usage: save src dst");
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
                 const save = await this.rfs.save(src, dst);
                 if (!save.stat) {
