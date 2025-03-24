@@ -79,8 +79,8 @@ const commands: {[key: string]: Command} = {
         args: 2
     },
     upload: {
-        desc: "upload file from disk to cloud",
-        usage: "upload <file> <folder>",
+        desc: "upload file or folder from disk to cloud",
+        usage: "upload <file|folder> <folder>",
         args: 2
     },
     download: {
@@ -677,7 +677,7 @@ class RecCli {
                 break;
             }
             // len === 1 and file or directory
-            // len === 2 and file or directory in local fs
+            // len === 2 and only directory in local fs
             case "download": {
                 if (len === 1) {
                     return {
@@ -689,7 +689,7 @@ class RecCli {
                     return {
                         prefix: prefix,
                         suffix: suffix,
-                        completions: await this.getPathCompletions(suffix, "fs")
+                        completions: (await this.getPathCompletions(suffix, "fs")).filter(c => c.endsWith("/"))
                     };
                 }
                 break;
