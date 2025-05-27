@@ -634,7 +634,7 @@ class RecFileSystem {
                 await this.api.uploadByFolderId(folder.id, src, folder.diskType, folder.groupId);
             } else if (stats.isDirectory()) {
                 // multithread upload using worker_thread
-                const count = 8;
+                const count = 4;
                 // construct workers
                 const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/upload-worker.js", { workerData: { auth: this.api.getUserAuth() } }));
 
@@ -781,7 +781,7 @@ class RecFileSystem {
             await downloadFile(url, dest);
         } else if (file.type === "folder") {
             // multithread download using worker_thread
-            const count = 8;
+            const count = 4;
             // construct workers
             const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/download-worker.js", { workerData: { auth: this.api.getUserAuth() } }));            
             
