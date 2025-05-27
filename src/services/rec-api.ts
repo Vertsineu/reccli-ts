@@ -705,7 +705,8 @@ class RecAPI {
                 storage: "moss",
                 disk_type: diskType,
                 group_number: groupId,
-                fingerprint: await this.calcFingerprint(filePath)
+                // too slow for javascript !!!
+                // fingerprint: await this.calcFingerprint(filePath)
             }
         }) as ResponseType;
 
@@ -718,6 +719,7 @@ class RecAPI {
         
         // 2 upload file
         const fileStream = fs.createReadStream(filePath, { highWaterMark: uploadChunkSize });
+        const uploadRequests = [];
         let idx = 0;
         for await (const chunk of fileStream) {
             const uploadParams = res.entity.upload_params[idx++];
@@ -726,12 +728,17 @@ class RecAPI {
             const uploadUrl = uploadParams[1].value;
             const uploadMethod = uploadParams[2].value;
 
-            await this.request({
-                method: uploadMethod,
-                url: uploadUrl,
-                data: chunk,
-            })
+            uploadRequests.push(
+                this.request({
+                    method: uploadMethod,
+                    url: uploadUrl,
+                    data: chunk,
+                })
+            );
         }
+
+        // wait for all upload requests to complete
+        await Promise.all(uploadRequests);
 
         // 3. upload complete
         const res2 = await this.request({
