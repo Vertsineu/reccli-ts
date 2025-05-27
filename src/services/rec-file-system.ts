@@ -630,6 +630,7 @@ class RecFileSystem {
             const stats = fs.statSync(src);
 
             if (stats.isFile()) {
+                console.log(`[INFO] ${src}: uploading`);
                 await this.api.uploadByFolderId(folder.id, src, folder.diskType, folder.groupId);
             } else if (stats.isDirectory()) {
                 // multithread upload using worker_thread
@@ -774,7 +775,8 @@ class RecFileSystem {
         if (file.type === "file") {
             const dict = await this.api.getDownloadUrlByIds([file.id], file.groupId);
             const url = dict[file.id];
-    
+            
+            console.log(`[INFO] ${dest}: downloading`);
             // download file using url
             await downloadFile(url, dest);
         } else if (file.type === "folder") {
