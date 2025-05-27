@@ -719,7 +719,10 @@ class RecAPI {
         
         // 2 upload file
         const fileStream = fs.createReadStream(filePath, { highWaterMark: uploadChunkSize });
-        const uploadRequests = [];
+        const uploadRequests = new Set();
+        // upload size of one promise is 64MB
+        // to avoid OOM, limit the max concurrent upload size to 1GB
+        const concurrentLimit = 16;
         let idx = 0;
         for await (const chunk of fileStream) {
             const uploadParams = res.entity.upload_params[idx++];
@@ -728,17 +731,29 @@ class RecAPI {
             const uploadUrl = uploadParams[1].value;
             const uploadMethod = uploadParams[2].value;
 
-            uploadRequests.push(
-                this.request({
-                    method: uploadMethod,
-                    url: uploadUrl,
-                    data: chunk,
-                })
-            );
+            if (uploadRequests.size >= concurrentLimit) {
+                // wait for a finished request
+                await Promise.race(uploadRequests);
+            }
+
+            const uploadRequest = this.request({
+                method: uploadMethod,
+                url: uploadUrl,
+                data: chunk,
+            });
+
+            uploadRequest.finally(() => {
+                // remove the request from the set when it's finished
+                uploadRequests.delete(uploadRequest);
+            });
+
+            uploadRequests.add(uploadRequest);
         }
 
         // wait for all upload requests to complete
         await Promise.all(uploadRequests);
+        // release memory used by upload requests
+        uploadRequests.clear();
 
         // 3. upload complete
         const res2 = await this.request({
