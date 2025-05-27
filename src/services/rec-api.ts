@@ -721,8 +721,8 @@ class RecAPI {
         const fileStream = fs.createReadStream(filePath, { highWaterMark: uploadChunkSize });
         const uploadRequests = new Set();
         // upload size of one promise is 64MB
-        // to avoid OOM, limit the max concurrent upload size to 1GB
-        const concurrentLimit = 16;
+        // to avoid OOM, limit the max concurrent upload size to 512MB
+        const concurrentLimit = 8;
         let idx = 0;
         for await (const chunk of fileStream) {
             const uploadParams = res.entity.upload_params[idx++];
