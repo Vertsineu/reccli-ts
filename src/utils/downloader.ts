@@ -9,7 +9,9 @@ export async function downloadFile(url: string, dest: string) {
         responseType: 'stream', // set response type as 'stream'
     });
 
-    const writer = fs.createWriteStream(dest);
+    const writer = fs.createWriteStream(dest, {
+        highWaterMark: 1024 * 1024, // 1MB buffer size
+    });
 
     return new Promise<void>((resolve, reject) => {
         response.data.pipe(writer);
@@ -17,5 +19,4 @@ export async function downloadFile(url: string, dest: string) {
         writer.on('finish', resolve);
         writer.on('error', reject);
     })
-    
 }
