@@ -12,7 +12,7 @@ reccli-ts 是一个基于 TypeScript 的 USTC Rec 云盘服务的命令行界面
 
 ![优化前网络速率](docs/before.png)  
 ![优化后网络速率](docs/after.png)  
-<p align="center">图1：文件上传网络速率对比（上：优化前，下：优化后）</p>
+<p align="center">图1：文件上传网络速率对比（上：Rec 网页端，下：reccli-ts）</p>
 
 ## 安装
 
