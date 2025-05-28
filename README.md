@@ -7,6 +7,18 @@ reccli-ts 是一个基于 TypeScript 的 USTC Rec 云盘服务的命令行界面
 - **群组云盘访问**：reccli-ts 支持群组云盘的访问和管理，允许用户在群组中进行文件操作，同时遵循 USTC Rec 云盘的权限管理规则。
 - **文件夹上传下载**：reccli-ts 支持文件夹的上传和下载，用户可以方便地直接上传和下载整个文件夹，而不需要手动一个一个文件地操作。
 - **快速上传**：相比于原有的网页端需要提前计算 md5，并且仅支持串行上传，reccli-ts 则直接通过并行上传的方式跑满带宽，极大地提高了上传速度。
+  - 实测在 Windows 11 系统，千兆有线校园网下，传输单个约 38GB 的大文件时，使用 reccli-ts 上传时间仅有**不到 8 分钟**，而使用 Rec 网页端上传则需要**超过 43 分钟**，其中计算 md5 的时间就占据了 **11 分钟左右**。
+  - 使用 reccli-ts 上传时，网络速率几乎可以跑满带宽，而 Rec 网页端上传时，网络速率仅有最多不到 50% 的带宽占用率，具体对比如下图所示：
+
+<figure>
+  <div style="display: flex; justify-content: space-between;">
+    <img src="docs/before.png" alt="Rec 网页端" style="width: 48%;">
+    <img src="docs/after.png" alt="reccli-ts" style="width: 48%;">
+  </div>
+  <figcaption style="text-align: center; font-style: italic;">
+    图1：大文件上传带宽占用对比（左：Rec 网页端，右：reccli-ts）
+  </figcaption>
+</figure>
 
 ## 安装
 
