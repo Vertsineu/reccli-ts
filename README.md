@@ -52,17 +52,20 @@ help [command]
 ```bash
 help download
 ```
+## 结构
 
-## Acknowledgements
+reccli-ts 的根目录由以下几个次根目录组成：
 
-This project is based on the open-source library [reccli](https://github.com/taoky/reccli), which is licensed under the MIT License. The original repository provides a command-line interface for Rec Cloud Service.
+- `cloud`：用户个人云盘根目录
+- `recycle`：用户个人云盘回收站
+- `backup`：用户个人云盘备份目录
+- `group`：用户所在群组根目录
 
-### Modifications
+需要注意的是，只有 `save` 指令才能从 `group` 文件夹下保存文件或文件夹到 `cloud` 文件夹下，其他文件操作指令只能在**同一个**组或者个人云盘内操作，如果非要实现，必须先 `download`，再 `upload` 才能实现。
 
-The following modifications were made to the original project:
+## 注意事项
 
-- The original Python implementation has been re-written in TypeScript for better integration with modern JavaScript/TypeScript environments.
-- Added new functionality for **group cloud drive access**, allowing users to manage group-based operations in addition to individual account functionalities.
+由于 Rec API 的限制，部分指令的语义和在 Linux Shell 中的有所不同，其中一个最大的差异就是 `mv`，`cp`，`download` 等指令的最后一个参数，即目标路径，必须指向一个文件夹，即这些指令只能把源文件或文件夹放在目标文件夹下，不能**同时**指定操作后的文件或文件夹名，因此您需要保证目标文件夹下不要有**同名文件**或**同名文件夹**。
 
 ## License
 
