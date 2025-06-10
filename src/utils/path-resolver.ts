@@ -25,12 +25,3 @@ export function resolveRecFullPath(rfs: RecFileSystem, inputPath: string): strin
     }
     return resolvedPaths.join("/");
 }
-
-export function unescapeFromShell(path: string): string {
-    return path.replace(/\\(.)/g, "$1");
-}
-
-// for convenience, we only escape space and backslash
-export function escapeToShell(path: string): string {
-    return path.replace(/([\\ ])/g, "\\$1");
-}
