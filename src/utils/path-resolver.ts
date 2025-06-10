@@ -3,8 +3,9 @@ import os from 'os';
 import RecFileSystem from '@services/rec-file-system';
 
 // resolve ~ and relative path to absolute path
+// replace \ with / in the path
 export function resolveFullPath(inputPath: string): string {
-    return path.resolve(inputPath.replace(/^~/, os.homedir()));
+    return path.resolve(inputPath.replace(/^~/, os.homedir())).replace(/\\/g, "/");
 }
 
 // resolve relative path to absolute path in rec file system
