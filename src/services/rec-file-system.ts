@@ -591,6 +591,11 @@ class RecFileSystem {
             stat: false,
             msg: `cannot upload to backup root folder`
         };
+        // if path is in recycle, then upload failed
+        if (folder.diskType === "recycle") return {
+            stat: false,
+            msg: `cannot upload to recycle`
+        };
         // if path is not a folder, then upload failed
         if (folder.type !== "folder") return {
             stat: false,
@@ -727,10 +732,10 @@ class RecFileSystem {
             msg: `${src} not found`
         };
         const file = path[path.length - 1];
-        // if path is a root folder or groupRoot, then download failed
-        if (file.id === "0" || file === groupRoot) return {
+        // if path is groupRoot, then download failed
+        if (file === groupRoot) return {
             stat: false,
-            msg: `cannot download root folder or group root folder`
+            msg: `cannot download group root folder`
         };
         // if path is in recycle, then download failed
         if (path[0].diskType === "recycle") return {
