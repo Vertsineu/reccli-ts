@@ -80,13 +80,15 @@ reccli-ts run -c "download /cloud ."
 
 这条指令会将整个个人云盘下载到当前目录下的 `cloud` 文件夹中。
 
-同理，如果想要将某个群组云盘以文件夹的形式下载下来，你可以使用以下指令：
+但是，由于权限问题，如果想要将某个群组云盘以文件夹的形式下载下来，你必须将有下载权限的根目录一个一个下载下来：
 
 ```bash
-reccli-ts run -c "download /group/{group_name} ."
+reccli-ts run -c "download /group/{group_name}/{group_root_folder} ."
 ```
 
-将 `{group_name}` 替换为实际的群组名（先 `reccli-ts run -c "ls group"` 看一下加了哪些群组，然后记得复制后空格要用 `\` 转义一下），这条指令会将整个个人云盘下载到当前目录下的 `{group_name}` 文件夹中。
+将 `{group_name}` 替换为实际的群组名，`{group_root_folder}` 替换为实际的群组根目录文件夹名，这条指令会将整个个人云盘下载到当前目录下的 `{group_root_folder}` 文件夹中。
+
+其中 `{group_name}` 和 `{group_root_folder}` 需要您手动 `ls` 看一下，记得空格是需要用 `\` 转义的。
 
 ## 注意事项
 
