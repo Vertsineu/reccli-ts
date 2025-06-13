@@ -586,13 +586,8 @@ class RecFileSystem {
             stat: false,
             msg: `cannot upload to group root folder`
         };
-        // if path is backupRoot, then upload failed
-        if (folder === backupRoot) return {
-            stat: false,
-            msg: `cannot upload to backup root folder`
-        };
         // if path is in recycle, then upload failed
-        if (folder.diskType === "recycle") return {
+        if (path[0].diskType === "recycle") return {
             stat: false,
             msg: `cannot upload to recycle`
         };
