@@ -971,6 +971,42 @@ class RecFileSystem {
         };
     }
 
+    public async du(src: string): Promise<RetType<number>> {
+        const path = await this.calcPath(src);
+        // if path is null, then du failed
+        if (!path) return {
+            stat: false,
+            msg: `${src} not found`
+        };
+
+        // recursive calculate size
+        const calcSize = async (path: RecFile[]): Promise<number> => {
+            if (path.length === 0 || path[path.length - 1].type === "folder") {
+                // if path is root or path is a folder
+                const files = await this.lsc(path);
+                // if lsc failed, return 0
+                if (!files.stat) {
+                    console.log(`[WARN] lsc failed: ${files.msg}`);
+                    return 0;
+                }
+                // concurrent requests
+                const requests = files.data.map(f => calcSize([...path, f]));
+                // wait for all requests to finish and sum the sizes
+                return (await Promise.all(requests)).reduce((acc, size) => acc + size, 0);
+            } else {
+                // if path is a file, return its size
+                return path[path.length - 1].size;
+            }
+        }
+
+        const size = await calcSize(path);
+
+        return {
+            stat: true,
+            data: size
+        };
+    }
+
 }
 
 export default RecFileSystem;

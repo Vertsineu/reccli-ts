@@ -108,6 +108,11 @@ const commands: {[key: string]: Command} = {
         usage: "df",
         args: 0
     },
+    du: {
+        desc: "display disk usage of a file or folder",
+        usage: "du [file|folder]",
+        args: 1
+    },
     help: {
         desc: "display help information",
         usage: "help [command]",
@@ -398,6 +403,15 @@ class RecCli {
                 console.log(`Group disk usage: ${byteToSize(df.data.group.usedBytes)} / ${byteToSize(df.data.group.totalBytes)}`);
                 break;
             }
+            case "du": {
+                const path = args[0] ?? ".";
+                const du = await this.rfs.du(path);
+                if (!du.stat) {
+                    throw new Error(`du: ${du.msg}`);
+                }
+                console.log(`${byteToSize(du.data)}    ${path}`);
+                break;
+            }
             case "help": {
                 const cmd = args[0];
                 if (cmd) {
@@ -626,6 +640,7 @@ class RecCli {
             case "rm":
             case "recycle":
             case "rename":
+            case "du":
             {
                 if (len === 1) {
                     return {
