@@ -78,7 +78,7 @@ reccli-ts 的根目录由以下几个次根目录组成：
 reccli-ts run -c "download /cloud ."
 ```
 
-这条指令会将整个个人云盘下载到当前目录下的 `cloud` 文件夹中。
+这条指令会将整个个人云盘下载为当前目录下的 `cloud` 文件夹。
 
 但是，由于权限问题，如果想要将某个群组云盘以文件夹的形式下载下来，你必须将有下载权限的根目录一个一个下载下来：
 
@@ -86,7 +86,7 @@ reccli-ts run -c "download /cloud ."
 reccli-ts run -c "download /group/{group_name}/{group_root_folder} ."
 ```
 
-将 `{group_name}` 替换为实际的群组名，`{group_root_folder}` 替换为实际的群组根目录文件夹名，这条指令会将整个个人云盘下载到当前目录下的 `{group_root_folder}` 文件夹中。
+将 `{group_name}` 替换为实际的群组名，`{group_root_folder}` 替换为实际的群组根目录文件夹名，这条指令会将根目录下载为当前目录下的 `{group_root_folder}` 文件夹。
 
 其中 `{group_name}` 和 `{group_root_folder}` 需要您手动 `ls` 看一下，记得空格是需要用 `\` 转义的。
 
