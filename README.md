@@ -86,7 +86,7 @@ reccli-ts run -c "download /cloud ."
 reccli-ts run -c "download /group/{group_name} ."
 ```
 
-将 `{group_name}` 替换为实际的群组名（先 `reccli-ts run -c "ls group"` 看一下加了哪些群组），这条指令会将整个个人云盘下载到当前目录下的 `{group_name}` 文件夹中。
+将 `{group_name}` 替换为实际的群组名（先 `reccli-ts run -c "ls group"` 看一下加了哪些群组，然后记得复制后空格要用 `\` 转义一下），这条指令会将整个个人云盘下载到当前目录下的 `{group_name}` 文件夹中。
 
 ## 注意事项
 
