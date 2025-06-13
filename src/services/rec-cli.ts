@@ -138,6 +138,8 @@ class RecCli {
     private interrupted = false;
     private interruptCount = 0;
 
+    private running = false;
+
     constructor(api: RecAPI, nonInteractive?: boolean) {
         this.rfs = new RecFileSystem(api);
         this.rl = readline.createInterface({
@@ -463,7 +465,11 @@ class RecCli {
         } else { // reset interrupt count
             this.interruptCount = 0;
             // 2. parse command and handle error
+            // if there is any command running, then ignore the input
+            if (this.running) return;
             try {
+                // begin running
+                this.running = true;
                 const [cmd, ...args] = parseShellCommand(line);
                 await this.parseCommand(cmd, args);
             } catch (err) {
@@ -472,6 +478,9 @@ class RecCli {
                 } else {
                     console.error("Unknown error");
                 }
+            } finally {
+                // end running
+                this.running = false;
             }
         }
         
