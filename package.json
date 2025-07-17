@@ -32,6 +32,7 @@
     "axios": "^1.7.7",
     "commander": "^12.1.0",
     "inquirer": "^12.1.0",
-    "wcwidth": "^1.0.1"
+    "wcwidth": "^1.0.1",
+    "webdav": "^5.8.0"
   }
 }

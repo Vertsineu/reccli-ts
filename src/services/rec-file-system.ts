@@ -1,11 +1,13 @@
 import RecAPI, { DiskType, FileType } from "@services/rec-api.js";
 import fs from "fs";
-import { downloadFile } from "@utils/downloader.js";
+import { downloadFile, downloadToWebDav } from "@utils/downloader.js";
 import { DownloadTask, DownloadWorkerMessage } from "./workers/download-worker.js";
 import { Worker } from "worker_threads";
 import path from 'path';
 import { fileURLToPath } from "url";
 import { UploadTask, UploadWorkerMessage } from "./workers/upload-worker.js";
+import { PanDavClient } from "./pan-dav.js";
+import { TransferTask, TransferWorkerMessage } from "./workers/transfer-worker.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -151,7 +153,7 @@ class RecFileSystem {
     // get current working directory
     public pwd(): RetType<string> {
         return {
-            stat: true, 
+            stat: true,
             data: "/" + this.cwd.map(f => f.name).join("/")
         };
     }
@@ -191,12 +193,12 @@ class RecFileSystem {
             const group = cwd[1]; // current group
             const folders = await this.api.listById(group.id, group.diskType, group.groupId);
             // array of roles
-            const roleIdPairArray: {id: string, role: Role}[] = (await this.api.getPrivilegeByGroupId(group.groupId!)).resource_operations.map(r => ({
+            const roleIdPairArray: { id: string, role: Role }[] = (await this.api.getPrivilegeByGroupId(group.groupId!)).resource_operations.map(r => ({
                 id: r.folder_id,
                 role: roles[r.role_type]
             }));
             // dict of roles
-            const roleIdPairDict: {[key: string]: Role} = {};
+            const roleIdPairDict: { [key: string]: Role } = {};
             for (const roleIdPair of roleIdPairArray) {
                 roleIdPairDict[roleIdPair.id] = roleIdPair.role;
             }
@@ -254,7 +256,7 @@ class RecFileSystem {
     public async cd(src: string): Promise<RetType<void>> {
         const path = await this.calcPath(src);
         // if path is null or path is a file, then cd failed
-        if (!path || (path.length !== 0 && path[path.length - 1].type !== "folder")) 
+        if (!path || (path.length !== 0 && path[path.length - 1].type !== "folder"))
             return {
                 stat: false,
                 msg: `${src} is not a folder`
@@ -321,7 +323,7 @@ class RecFileSystem {
             msg: `cannot copy to or into subfolder`
         };
 
-        await this.api.operationByIdType("copy", [{id: srcFile.id, type: srcFile.type}], destFolder.id, destFolder.diskType, destFolder.groupId);
+        await this.api.operationByIdType("copy", [{ id: srcFile.id, type: srcFile.type }], destFolder.id, destFolder.diskType, destFolder.groupId);
 
         return {
             stat: true,
@@ -379,14 +381,14 @@ class RecFileSystem {
             stat: false,
             msg: `cannot move to backup`
         };
-        
+
         // if destFolder is or is subfolder of srcFolder, then mv failed
         if (destPath.length >= srcPath.length && destPath.slice(0, srcPath.length).every((f, i) => f.id === srcPath[i].id)) return {
             stat: false,
             msg: `cannot move to or into subfolder`
         };
 
-        await this.api.operationByIdType("move", [{id: srcFile.id, type: srcFile.type}], destFolder.id, destFolder.diskType, destFolder.groupId);
+        await this.api.operationByIdType("move", [{ id: srcFile.id, type: srcFile.type }], destFolder.id, destFolder.diskType, destFolder.groupId);
 
         return {
             stat: true,
@@ -408,8 +410,8 @@ class RecFileSystem {
             msg: `cannot remove root folder or group root folder`
         };
 
-        await this.api.operationByIdType("delete", [{id: file.id, type: file.type}], undefined, file.diskType, file.groupId);
-        
+        await this.api.operationByIdType("delete", [{ id: file.id, type: file.type }], undefined, file.diskType, file.groupId);
+
         return {
             stat: true,
             data: undefined
@@ -441,8 +443,8 @@ class RecFileSystem {
         };
 
 
-        await this.api.operationByIdType("recycle", [{id: file.id, type: file.type}], undefined, file.diskType, file.groupId);
-        
+        await this.api.operationByIdType("recycle", [{ id: file.id, type: file.type }], undefined, file.diskType, file.groupId);
+
         return {
             stat: true,
             data: undefined
@@ -495,7 +497,7 @@ class RecFileSystem {
             msg: `cannot restore between different groups`
         };
 
-        await this.api.operationByIdType("restore", [{id: srcFile.id, type: srcFile.type}], destFolder.id, destFolder.diskType, destFolder.groupId);
+        await this.api.operationByIdType("restore", [{ id: srcFile.id, type: srcFile.type }], destFolder.id, destFolder.diskType, destFolder.groupId);
 
         return {
             stat: true,
@@ -524,9 +526,9 @@ class RecFileSystem {
         };
 
         if (file.type == "file")
-            await this.api.renameByIdExt({id: file.id, type: file.type}, name, file.groupId);
+            await this.api.renameByIdExt({ id: file.id, type: file.type }, name, file.groupId);
         else if (file.type == "folder")
-            await this.api.renameByIdType({id: file.id, type: file.type}, name, file.groupId);
+            await this.api.renameByIdType({ id: file.id, type: file.type }, name, file.groupId);
 
         return {
             stat: true,
@@ -671,7 +673,7 @@ class RecFileSystem {
                                     if (index === -1) return;
                                     const task = queue.shift(); 
                                     ready[index] = false;
-                                    worker.postMessage({ type: "task", index: index, task: task });
+                                    workers[index].postMessage({ type: "task", index: index, task: task });
                                 }
 
                                 // task queue is empty, then check if it is all finished
@@ -703,7 +705,7 @@ class RecFileSystem {
                 // wait for all finished
                 await finished;
             }
-            
+
         } catch (e) {
             return {
                 stat: false,
@@ -775,7 +777,7 @@ class RecFileSystem {
         if (file.type === "file") {
             const dict = await this.api.getDownloadUrlByIds([file.id], file.groupId);
             const url = dict[file.id];
-            
+
             console.log(`[INFO] ${dest}: downloading`);
             // download file using url
             await downloadFile(url, dest);
@@ -783,8 +785,8 @@ class RecFileSystem {
             // multithread download using worker_thread
             const count = 4;
             // construct workers
-            const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/download-worker.js", { workerData: { auth: this.api.getUserAuth() } }));            
-            
+            const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/download-worker.js", { workerData: { auth: this.api.getUserAuth() } }));
+
             // construct ready flag array
             const ready = new Array(count).fill(true);
 
@@ -818,7 +820,153 @@ class RecFileSystem {
                                 if (index === -1) return;
                                 const task = queue.shift();
                                 ready[index] = false;
-                                worker.postMessage({ type: "task", index: index, task: task });
+                                workers[index].postMessage({ type: "task", index: index, task: task });
+                            }
+
+                            // task queue is empty, then check if it is all finished
+                            if (ready.some(r => !r)) return;
+
+                            // if all finished, then stop all workers 
+                            workers.forEach(w => {
+                                w.postMessage({ type: "exit" })
+                                w.terminate();
+                            });
+                            resolve();
+                        } else if (type === "error") {
+                            // if error, then stop all workers
+                            workers.forEach(w => {
+                                w.postMessage({ type: "exit" })
+                                w.terminate();
+                            });
+                            // and then throw error
+                            reject(msg.error);
+                        }
+                    });
+                });
+            });
+
+            // start the first task
+            ready[0] = false;
+            workers[0].postMessage({ type: "task", index: 0, task: task });
+
+            // wait for all finished
+            await finished;
+        }
+
+        return {
+            stat: true,
+            data: undefined
+        };
+    }
+
+    // dest must be a folder
+    public async transfer(src: string, dest: string, client: PanDavClient): Promise<RetType<void>> {
+        const path = await this.calcPath(src);
+        // if path is null or path is root, then transfer failed
+        if (!path || path.length === 0) return {
+            stat: false,
+            msg: `${src} not found`
+        };
+        const file = path[path.length - 1];
+        // if path is groupRoot, then transfer failed
+        if (file === groupRoot) return {
+            stat: false,
+            msg: `cannot download group root folder`
+        };
+        // if path is in recycle, then transfer failed
+        if (path[0].diskType === "recycle") return {
+            stat: false,
+            msg: `cannot download a file in recycle`
+        };
+        // if has no download permission, then transfer failed
+        if (!file.role.download) return {
+            stat: false,
+            msg: `no download permission`
+        };
+
+        // remove trailing slash
+        dest = dest.replace(/\/$/, "");
+
+        try {
+            // if dest is empty (root folder), then transfer failed
+            if (dest.trim().length === 0) {
+                throw new Error(`cannot transfer to root folder`);
+            }
+            // if dest does not exist, then transfer failed
+            if (!await client.exists(dest)) {
+                throw new Error(`${dest} not found in webdav`);
+            }
+
+            // if dest is not a directory, then transfer failed
+            const stat = await client.stat(dest);
+            if ("data" in stat ? stat.data.type !== "directory" : stat.type !== "directory") {
+                throw new Error(`${dest} is not a folder`);
+            }
+
+            // if dest contains file with the same name, then transfer failed
+            const directoryContents = await client.getDirectoryContents(dest);
+            const stats = "data" in directoryContents ? directoryContents.data : directoryContents;
+
+            if(stats.some(s => s.basename === file.name)) {
+                throw new Error(`file with the same name exists in ${dest}`);
+            }
+
+            // if dest is a folder, then transfer with the name of src
+            dest = dest + "/" + file.name;
+        } catch (e) {
+            return {
+                stat: false,
+                msg: String(e)
+            }
+        }
+
+        if (file.type === "file") {
+            const dict = await this.api.getDownloadUrlByIds([file.id], file.groupId);
+            const url = dict[file.id];
+
+            console.log(`[INFO] ${dest}: transferring`);
+            // transfer file using url
+            await downloadToWebDav(url, dest, client);
+        } else if (file.type === "folder") {
+            // multithread transfer using worker_thread
+            const count = 4;
+            // construct workers
+            const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/transfer-worker.js", { workerData: { recAuth: this.api.getUserAuth(), panDavAuth: client.getPanDavAuth() } }));
+
+            // construct ready flag array
+            const ready = new Array(count).fill(true);
+
+            // construct root task
+            const task: TransferTask = {
+                id: file.id,
+                diskType: file.diskType,
+                groupId: file.groupId,
+                type: file.type,
+                path: dest
+            }
+
+            // construct task queue
+            const queue: TransferTask[] = [];
+
+            // construct promise for all task finish
+            const finished = new Promise<void>((resolve, reject) => {
+                // deal with message from worker
+                workers.forEach(worker => {
+                    worker.on("message", (msg: TransferWorkerMessage) => {
+                        const { type } = msg;
+                        if (type === "finish") {
+                            // set ready flag
+                            ready[msg.index] = true;
+                            // add tasks to queue
+                            queue.push(...msg.tasks);
+
+                            // try to allocate tasks to all ready workers
+                            while (queue.length > 0) {
+                                const index = ready.indexOf(true);
+                                if (index === -1) return;
+                                const task = queue.shift();
+                                ready[index] = false;
+                                workers[index].postMessage({ type: "task", index: index, task: task });
                             }
 
                             // task queue is empty, then check if it is all finished
@@ -889,7 +1037,7 @@ class RecFileSystem {
             stat: false,
             msg: `no download permission`
         };
-        
+
 
         const destFolder = destPath[destPath.length - 1];
         // if destFolder is not a folder, then save failed
@@ -898,7 +1046,7 @@ class RecFileSystem {
             msg: `${dest} is not a folder`
         };
 
-        await this.api.saveToCloud([{id: srcFile.id, type: srcFile.type}], destFolder.id, srcFile.groupId!);
+        await this.api.saveToCloud([{ id: srcFile.id, type: srcFile.type }], destFolder.id, srcFile.groupId!);
 
         return {
             stat: true,

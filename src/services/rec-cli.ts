@@ -9,6 +9,7 @@ import fs from "fs";
 import { RecFileCache } from "@services/rec-file-cache.js";
 import { Readable, Writable } from "stream";
 import { parseShellCommand, escapeToShell, unescapeFromShell } from "@utils/shell-parser.js";
+import { PanDavClient } from "./pan-dav.js";
 
 type Command = {
     desc: string,
@@ -22,7 +23,7 @@ type CompletionResult = {
     completions: string[]
 }
 
-const commands: {[key: string]: Command} = {
+const commands: { [key: string]: Command } = {
     ls: {
         desc: "list files and folders in the given folder, default is current folder",
         usage: "ls [folder]",
@@ -88,6 +89,11 @@ const commands: {[key: string]: Command} = {
         usage: "download <file|folder> <folder>",
         args: 2
     },
+    transfer: {
+        desc: "transfer file or folder from rec to pan",
+        usage: "transfer <file|folder> <folder>",
+        args: 2
+    },
     save: {
         desc: "save file or folder from group to cloud",
         usage: "save <file|folder> <folder>",
@@ -135,17 +141,19 @@ class RecCli {
     private rfc: RecFileCache = new RecFileCache();
     private rl: Interface;
 
+    private client?: PanDavClient;
+
     private interrupted = false;
     private interruptCount = 0;
 
     private running = false;
 
-    constructor(api: RecAPI, nonInteractive?: boolean) {
+    constructor(api: RecAPI, client?: PanDavClient, nonInteractive?: boolean) {
         this.rfs = new RecFileSystem(api);
         this.rl = readline.createInterface({
             // if nonInteractive, use a readable stream that does nothing
-            input: nonInteractive ? new Readable({ read() {} }) : process.stdin,
-            output: nonInteractive ? new Writable({ write() {} }) : process.stdout,
+            input: nonInteractive ? new Readable({ read() { } }) : process.stdin,
+            output: nonInteractive ? new Writable({ write() { } }) : process.stdout,
             prompt: "/> ",
             completer: (line, callback) => this.completer(line, callback),
             terminal: true
@@ -153,6 +161,7 @@ class RecCli {
         this.rl.on("line", (line) => this.parseLine(line));
         this.rl.on("SIGINT", () => this.interrupt());
         this.rl.on("close", () => exit(0));
+        this.client = client;
     }
 
     public run(): void {
@@ -357,6 +366,21 @@ class RecCli {
                 }
                 break;
             }
+            case "transfer": {
+                const src = args[0];
+                const dst = args[1];
+                if (!src || !dst) {
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
+                }
+                if (!this.client) {
+                    throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
+                }
+                const transfer = await this.rfs.transfer(src, dst, this.client);
+                if (!transfer.stat) {
+                    throw new Error(`transfer: ${transfer.msg}`);
+                }
+                break;
+            }
             case "save": {
                 const src = args[0];
                 const dst = args[1];
@@ -473,19 +497,15 @@ class RecCli {
                 const [cmd, ...args] = parseShellCommand(line);
                 await this.parseCommand(cmd, args);
             } catch (err) {
-                if (err instanceof Error) {
-                    console.error(err.message);
-                } else {
-                    console.error("Unknown error");
-                }
+                console.log(String(err));
             } finally {
                 // end running
                 this.running = false;
             }
         }
-        
+
         // 3. update prompt
-        if (nonInteractive) return;
+        if (nonInteractive || this.running) return;
         const pwd = this.rfs.pwd();
         this.rl.setPrompt((pwd.stat ? pwd.data : "/") + "> ");
         this.rl.prompt();
@@ -501,12 +521,13 @@ class RecCli {
         readline.clearLine(process.stdout, 0);
         // move cursor to the beginning of the line
         readline.cursorTo(process.stdout, 0);
-        
+
         // reset interrupted flag
-        this.interrupted = false; 
+        this.interrupted = false;
 
         // prompt again
-        this.rl.prompt(); 
+        if (this.running) return;
+        this.rl.prompt();
     }
 
     private getCommandCompletions(cmd: string): string[] {
@@ -514,8 +535,8 @@ class RecCli {
     }
 
     // arg is the last argument, may be empty or incomplete
-    // type is "rfs" or "fs", "rfs" means the path is in the rec file system, "fs" means the path is in the local file system
-    private async getPathCompletions(arg: string, type: "rfs" | "fs"): Promise<string[]> {
+    // type is "rfs" or "fs", "rfs" means the path is in the rec file system, "fs" means the path is in the local file system, "pfs" means the path is in the pan dav file system
+    private async getPathCompletions(arg: string, type: "rfs" | "fs" | "pfs"): Promise<string[]> {
         try {
             // support space in file name
             arg = unescapeFromShell(arg);
@@ -536,7 +557,7 @@ class RecCli {
 
                 let files: File[];
 
-                if (cache) 
+                if (cache)
                     files = cache;
                 else {
                     const ls = await this.rfs.ls(dirPath);
@@ -557,10 +578,10 @@ class RecCli {
                 }
 
                 return files.map(f => f.name + (f.type === "folder" ? "/" : ""))
-                                .filter(f => f.startsWith(filePrefix) && f !== filePrefix)
-                                .map(f => dirPath + f)
-                                // support space in file name
-                                .map(f => escapeToShell(f));
+                    .filter(f => f.startsWith(filePrefix) && f !== filePrefix)
+                    .map(f => dirPath + f)
+                    // support space in file name
+                    .map(f => escapeToShell(f));
             } else if (type === "fs") {
                 // resolve the path
                 const path = resolveFullPath(dirPath);
@@ -582,11 +603,41 @@ class RecCli {
 
                 // filter the files based on the prefix
                 return files.map(f => f.name + (f.type === "folder" ? "/" : ""))
-                            .filter(f => f.startsWith(filePrefix) && f !== filePrefix)
-                            .filter(f => showHidden || !f.startsWith("."))
-                            .map(f => dirPath + f)
-                            // support space in file name
-                            .map(f => escapeToShell(f));
+                    .filter(f => f.startsWith(filePrefix) && f !== filePrefix)
+                    .filter(f => showHidden || !f.startsWith("."))
+                    .map(f => dirPath + f)
+                    // support space in file name
+                    .map(f => escapeToShell(f));
+            } else if (type === "pfs") {
+                // if no client, return empty completions
+                if (!this.client) {
+                    return [];
+                }
+
+                // no need to check path, because only absolute path is supported
+                const files: File[] = [];
+                const directoryContents = await this.client.getDirectoryContents(dirPath);
+                const entries = "data" in directoryContents ? directoryContents.data : directoryContents;
+
+                // iterate over the entries to get the files and directories
+                for (const entry of entries) {
+                    if (entry.type === "file") {
+                        files.push({ name: entry.basename, type: "file" });
+                    } else if (entry.type === "directory") {
+                        files.push({ name: entry.basename, type: "folder" });
+                    }
+                }
+
+                // show hidden files if the prefix starts with "."
+                const showHidden = filePrefix.startsWith(".");
+
+                // filter the files based on the prefix
+                return files.map(f => f.name + (f.type === "folder" ? "/" : ""))
+                    .filter(f => f.startsWith(filePrefix) && f !== filePrefix)
+                    .filter(f => showHidden || !f.startsWith("."))
+                    .map(f => dirPath + f)
+                    // support space in file name
+                    .map(f => escapeToShell(f));
             }
         } catch (err) {
             // if error, return empty completions
@@ -635,53 +686,53 @@ class RecCli {
             case "cd":
             case "mkdir":
             case "rmdir":
-            {
-                if (len === 1) {
-                    return {
-                        prefix: prefix,
-                        suffix: suffix,
-                        completions: (await this.getPathCompletions(suffix, "rfs")).filter(c => c.endsWith("/"))
-                    };
+                {
+                    if (len === 1) {
+                        return {
+                            prefix: prefix,
+                            suffix: suffix,
+                            completions: (await this.getPathCompletions(suffix, "rfs")).filter(c => c.endsWith("/"))
+                        };
+                    }
+                    break;
                 }
-                break;
-            }
             // len === 1 and file or directory
             case "rm":
             case "recycle":
             case "rename":
             case "du":
-            {
-                if (len === 1) {
-                    return {
-                        prefix: prefix,
-                        suffix: suffix,
-                        completions: await this.getPathCompletions(suffix, "rfs")
-                    };
+                {
+                    if (len === 1) {
+                        return {
+                            prefix: prefix,
+                            suffix: suffix,
+                            completions: await this.getPathCompletions(suffix, "rfs")
+                        };
+                    }
+                    break;
                 }
-                break;
-            }
             // len === 1 and file or directory
             // len === 2 and only directory
             case "cp":
-            case "mv": 
+            case "mv":
             case "restore":
             case "save":
-            {
-                if (len === 1) {
-                    return {
-                        prefix: prefix,
-                        suffix: suffix,
-                        completions: await this.getPathCompletions(suffix, "rfs")
-                    };
-                } else if (len === 2) {
-                    return {
-                        prefix: prefix,
-                        suffix: suffix,
-                        completions: (await this.getPathCompletions(suffix, "rfs")).filter(c => c.endsWith("/"))
-                    };
+                {
+                    if (len === 1) {
+                        return {
+                            prefix: prefix,
+                            suffix: suffix,
+                            completions: await this.getPathCompletions(suffix, "rfs")
+                        };
+                    } else if (len === 2) {
+                        return {
+                            prefix: prefix,
+                            suffix: suffix,
+                            completions: (await this.getPathCompletions(suffix, "rfs")).filter(c => c.endsWith("/"))
+                        };
+                    }
+                    break;
                 }
-                break;
-            }
             // len === 1 and file in local fs
             // len === 2 and only directory
             case "upload": {
@@ -718,6 +769,24 @@ class RecCli {
                 }
                 break;
             }
+            // len === 1 and file or directory
+            // len === 2 and only directory in pan dav fs
+            case "transfer": {
+                if (len === 1) {
+                    return {
+                        prefix: prefix,
+                        suffix: suffix,
+                        completions: await this.getPathCompletions(suffix, "rfs")
+                    };
+                } else if (len === 2) {
+                    return {
+                        prefix: prefix,
+                        suffix: suffix,
+                        completions: (await this.getPathCompletions(suffix, "pfs")).filter(c => c.endsWith("/"))
+                    };
+                }
+                break;
+            }
             // len === 1 and cmd
             case "help": {
                 return {
@@ -747,7 +816,7 @@ class RecCli {
 
                 const { prefix, suffix, completions } = await this.getCompletionResult(line);
 
-                if (completions.length === 0) 
+                if (completions.length === 0)
                     // if no completions, return the line
                     return callback(null, [completions, line]);
 
@@ -759,22 +828,22 @@ class RecCli {
                     }
                     return prev.slice(0, i);
                 }, completions[0]);
-                
-                if (commonPrefix.length === 0) 
-                // if common prefix is empty, return the completions
+
+                if (commonPrefix.length === 0)
+                    // if common prefix is empty, return the completions
                     callback(null, [completions, line]);
                 else if (suffix === commonPrefix)
-                // if common prefix is the same as the suffix, return the completions without the common prefix
+                    // if common prefix is the same as the suffix, return the completions without the common prefix
                     callback(null, [completions.map(c => c.slice(commonPrefix.length)), line]);
-                else 
-                // if common prefix is not empty, return the completions with the common prefix
+                else
+                    // if common prefix is not empty, return the completions with the common prefix
                     callback(null, [completions.map(c => prefix + c), line]);
 
             } catch (error) {
                 if (error instanceof Error) {
                     callback(error);
                 } else {
-                    callback(new Error("Unknown error"));
+                    callback(new Error(String(error)));
                 }
             }
         })();
