@@ -177,7 +177,7 @@ class RecFileSystem {
                 data: groups.datas.map(g => ({
                     id: "0",
                     diskType: "cloud",
-                    role: roles[0],
+                    role: roles[1],
                     groupId: g.group_number,
 
                     name: g.group_name,
