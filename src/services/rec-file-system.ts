@@ -610,8 +610,8 @@ class RecFileSystem {
             stat: false,
             msg: `cannot list files in parent folder of ${src}`
         };
-        const nameSet = new Set(parentFiles.data.map(f => f.name));
-        if (files.data.some(f => nameSet.has(f.name))) {
+        const existingNames = new Set(parentFiles.data.map(f => f.name));
+        if (files.data.some(f => existingNames.has(f.name))) {
             return {
                 stat: false,
                 msg: `file with the same name exists in parent folder of ${src}`
@@ -1206,7 +1206,8 @@ class RecFileSystem {
 
         // recursive calculate size
         const calcSize = async (path: RecFile[]): Promise<number> => {
-            if (path.length === 0 || path[path.length - 1].type === "folder") {
+            const file = path[path.length - 1];
+            if (path.length === 0 || file.type === "folder") {
                 // if path is root or path is a folder
                 const files = await this.lsc(path);
                 // if lsc failed, return 0
@@ -1220,7 +1221,7 @@ class RecFileSystem {
                 return (await Promise.all(requests)).reduce((acc, size) => acc + size, 0);
             } else {
                 // if path is a file, return its size
-                return path[path.length - 1].size;
+                return file.size;
             }
         }
 

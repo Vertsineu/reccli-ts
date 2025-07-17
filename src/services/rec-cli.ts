@@ -10,6 +10,7 @@ import { RecFileCache } from "@services/rec-file-cache.js";
 import { Readable, Writable } from "stream";
 import { parseShellCommand, escapeToShell, unescapeFromShell } from "@utils/shell-parser.js";
 import { PanDavClient } from "./pan-dav-api.js";
+import PanDavFileSystem from "./pan-dav-file-system.js";
 
 type Command = {
     desc: string,
@@ -34,9 +35,19 @@ const commands: { [key: string]: Command } = {
         usage: "lsp [folder]",
         args: 1
     },
+    lsw: {
+        desc: "list files and folders in the given folder in pan dav",
+        usage: "lsw <folder>",
+        args: 1
+    },
     cd: {
         desc: "change current folder to the given folder, default is root folder",
         usage: "cd [folder]",
+        args: 1
+    },
+    cdw: {
+        desc: "change current folder to the given folder in pan dav, default is root folder",
+        usage: "cdw [folder]",
         args: 1
     },
     cp: {
@@ -44,13 +55,28 @@ const commands: { [key: string]: Command } = {
         usage: "cp <file|folder> <folder>",
         args: 2
     },
+    cpw: {
+        desc: "copy file or folder to another folder in pan dav",
+        usage: "cpw <file|folder> <folder>",
+        args: 2
+    },
     mv: {
         desc: "move file or folder to another folder in the same cloud or group",
         usage: "mv <file|folder> <folder>",
         args: 2
     },
+    mvw: {
+        desc: "move file or folder to another folder in pan dav",
+        usage: "mvp <file|folder> <folder>",
+        args: 2
+    },
     rm: {
         desc: "remove file or folder in the cloud or group",
+        usage: "rm <file|folder>",
+        args: 1
+    },
+    rmw: {
+        desc: "remove file or folder in pan dav",
         usage: "rm <file|folder>",
         args: 1
     },
@@ -59,14 +85,29 @@ const commands: { [key: string]: Command } = {
         usage: "mkdir <folder>",
         args: 1
     },
+    mkdirw: {
+        desc: "create a new folder in pan dav",
+        usage: "mkdirw <folder>",
+        args: 1
+    },
     rmdir: {
         desc: "remove the folder",
         usage: "rmdir <folder>",
         args: 1
     },
+    rmdirw: {
+        desc: "remove the folder in pan dav",
+        usage: "rmdirw <folder>",
+        args: 1
+    },
     unwrap: {
         desc: "unwrap a folder, move all files and folders in the folder to the parent folder",
         usage: "unwrap <folder>",
+        args: 1
+    },
+    unwrapw: {
+        desc: "unwrap a folder in pan dav, move all files and folders in the folder to the parent folder",
+        usage: "unwrapw <folder>",
         args: 1
     },
     recycle: {
@@ -82,6 +123,11 @@ const commands: { [key: string]: Command } = {
     rename: {
         desc: "rename file or folder",
         usage: "rename <file|folder> <name>",
+        args: 2
+    },
+    renamew: {
+        desc: "rename file or folder in pan dav",
+        usage: "renamew <file|folder> <name>",
         args: 2
     },
     upload: {
@@ -124,6 +170,11 @@ const commands: { [key: string]: Command } = {
         usage: "du [file|folder]",
         args: 1
     },
+    duw: {
+        desc: "display disk usage of a file or folder in pan dav",
+        usage: "duw [file|folder]",
+        args: 1
+    },
     help: {
         desc: "display help information",
         usage: "help [command]",
@@ -147,6 +198,7 @@ class RecCli {
     private rl: Interface;
 
     private client?: PanDavClient;
+    private pfs?: PanDavFileSystem;
 
     private interrupted = false;
     private interruptCount = 0;
@@ -159,7 +211,7 @@ class RecCli {
             // if nonInteractive, use a readable stream that does nothing
             input: nonInteractive ? new Readable({ read() { } }) : process.stdin,
             output: nonInteractive ? new Writable({ write() { } }) : process.stdout,
-            prompt: "/> ",
+            prompt: "/[/]> ",
             completer: (line, callback) => this.completer(line, callback),
             terminal: true
         });
@@ -167,6 +219,7 @@ class RecCli {
         this.rl.on("SIGINT", () => this.interrupt());
         this.rl.on("close", () => exit(0));
         this.client = client;
+        this.pfs = client ? new PanDavFileSystem(client) : undefined;
     }
 
     public run(): void {
@@ -235,11 +288,53 @@ class RecCli {
                 })));
                 break;
             }
+            case "lsw": {
+                const src = args[0] ?? ".";
+                if (!this.pfs) {
+                    throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
+                }
+                const ls = await this.pfs.ls(src);
+                if (!ls.stat) {
+                    throw new Error(`lsw: ${ls.msg}`);
+                }
+                // name size download upload creator lastModified
+                const formatter = new TableFormatter([
+                    { name: "name", width: 40 },
+                    { name: "type", width: 8 },
+                    { name: "size", width: 10 },
+                    { name: "download", width: 10 },
+                    { name: "upload", width: 10 },
+                    { name: "creator", width: 10 },
+                    { name: "lastModified", width: 20 }
+                ]);
+                const data = ls.data.map((f) => ({
+                    name: { value: f.basename, color: f.type === "folder" ? "blue" : "green" },
+                    type: { value: f.type === "folder" ? "folder" : "file" },
+                    size: { value: byteToSize(f.size) },
+                    download: { value: null },
+                    upload: { value: null },
+                    creator: { value: null },
+                    lastModified: { value: f.lastmod }
+                }));
+                console.log(formatter.formatTable(data));
+                break;
+            }
             case "cd": {
                 const path = args[0] ?? "/";
                 const cd = await this.rfs.cd(path);
                 if (!cd.stat) {
                     throw new Error(`cd: ${cd.msg}`);
+                }
+                break;
+            }
+            case "cdw": {
+                const folder = args[0] ?? "/";
+                if (!this.pfs) {
+                    throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
+                }
+                const cdw = await this.pfs.cd(folder);
+                if (!cdw.stat) {
+                    throw new Error(`cdw: ${cdw.msg}`);
                 }
                 break;
             }
@@ -252,6 +347,22 @@ class RecCli {
                 const cp = await this.rfs.cp(src, dst);
                 if (!cp.stat) {
                     throw new Error(`cp: ${cp.msg}`);
+                }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst), true);
+                break;
+            }
+            case "cpw": {
+                const src = args[0];
+                const dst = args[1];
+                if (!src || !dst) {
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
+                }
+                if (!this.pfs) {
+                    throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
+                }
+                const cp = await this.pfs.cp(src, dst);
+                if (!cp.stat) {
+                    throw new Error(`cpw: ${cp.msg}`);
                 }
                 this.rfc.clearCache(resolveRecFullPath(this.rfs, dst), true);
                 break;
@@ -270,6 +381,23 @@ class RecCli {
                 this.rfc.clearCache(resolveRecFullPath(this.rfs, dst), true);
                 break;
             }
+            case "mvw": {
+                const src = args[0];
+                const dst = args[1];
+                if (!src || !dst) {
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
+                }
+                if (!this.pfs) {
+                    throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
+                }
+                const mv = await this.pfs.mv(src, dst);
+                if (!mv.stat) {
+                    throw new Error(`mvw: ${mv.msg}`);
+                }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, src), false);
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, dst), true);
+                break;
+            }
             case "rm": {
                 const path = args[0];
                 if (!path) {
@@ -278,6 +406,21 @@ class RecCli {
                 const rm = await this.rfs.rm(path);
                 if (!rm.stat) {
                     throw new Error(`rm: ${rm.msg}`);
+                }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
+                break;
+            }
+            case "rmw": {
+                const path = args[0];
+                if (!path) {
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
+                }
+                if (!this.pfs) {
+                    throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
+                }
+                const rm = await this.pfs.rm(path);
+                if (!rm.stat) {
+                    throw new Error(`rmw: ${rm.msg}`);
                 }
                 this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
                 break;
@@ -294,6 +437,21 @@ class RecCli {
                 this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
                 break;
             }
+            case "mkdirw": {
+                const path = args[0];
+                if (!path) {
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
+                }
+                if (!this.pfs) {
+                    throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
+                }
+                const mkdir = await this.pfs.mkdir(path);
+                if (!mkdir.stat) {
+                    throw new Error(`mkdirw: ${mkdir.msg}`);
+                }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
+                break;
+            }
             case "rmdir": {
                 const path = args[0];
                 if (!path) {
@@ -306,6 +464,21 @@ class RecCli {
                 this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
                 break;
             }
+            case "rmdirw": {
+                const path = args[0];
+                if (!path) {
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
+                }
+                if (!this.pfs) {
+                    throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
+                }
+                const rmdir = await this.pfs.rm(path);
+                if (!rmdir.stat) {
+                    throw new Error(`rmdirw: ${rmdir.msg}`);
+                }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
+                break;
+            }
             case "unwrap": {
                 const path = args[0];
                 if (!path) {
@@ -314,6 +487,21 @@ class RecCli {
                 const unwrap = await this.rfs.unwrap(path);
                 if (!unwrap.stat) {
                     throw new Error(`unwrap: ${unwrap.msg}`);
+                }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
+                break;
+            }
+            case "unwrapw": {
+                const path = args[0];
+                if (!path) {
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
+                }
+                if (!this.pfs) {
+                    throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
+                }
+                const unwrap = await this.pfs.unwrap(path);
+                if (!unwrap.stat) {
+                    throw new Error(`unwrapw: ${unwrap.msg}`);
                 }
                 this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
                 break;
@@ -354,6 +542,22 @@ class RecCli {
                 const rename = await this.rfs.rename(src, name);
                 if (!rename.stat) {
                     throw new Error(`rename: ${rename.msg}`);
+                }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, src), false);
+                break;
+            }
+            case "renamew": {
+                const src = args[0];
+                const name = args[1];
+                if (!src || !name) {
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
+                }
+                if (!this.pfs) {
+                    throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
+                }
+                const rename = await this.pfs.rename(src, name);
+                if (!rename.stat) {
+                    throw new Error(`renamew: ${rename.msg}`);
                 }
                 this.rfc.clearCache(resolveRecFullPath(this.rfs, src), false);
                 break;
@@ -455,6 +659,18 @@ class RecCli {
                 console.log(`${byteToSize(du.data)}    ${path}`);
                 break;
             }
+            case "duw": {
+                const path = args[0] ?? ".";
+                if (!this.pfs) {
+                    throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
+                }
+                const du = await this.pfs.du(path);
+                if (!du.stat) {
+                    throw new Error(`duw: ${du.msg}`);
+                }
+                console.log(`${byteToSize(du.data)}    ${path}`);
+                break;
+            }
             case "help": {
                 const cmd = args[0];
                 if (cmd) {
@@ -524,7 +740,14 @@ class RecCli {
         // 3. update prompt
         if (nonInteractive || this.running) return;
         const pwd = this.rfs.pwd();
-        this.rl.setPrompt((pwd.stat ? pwd.data : "/") + "> ");
+        const cwd = pwd.stat ? pwd.data : "/";
+        if (!this.pfs) {
+            this.rl.setPrompt(cwd + "> ");
+        } else {
+            const pwdw = this.pfs.pwd();
+            const cwdw = pwdw.stat ? pwdw.data : "/";
+            this.rl.setPrompt(`${cwd}[${cwdw}]> `);
+        }
         this.rl.prompt();
     }
 
@@ -633,7 +856,10 @@ class RecCli {
 
                 // no need to check path, because only absolute path is supported
                 const files: File[] = [];
-                const directoryContents = await this.client.getDirectoryContents(dirPath);
+                const pwd = this.pfs!.pwd();
+                const cwd = pwd.stat ? pwd.data : "/";
+                const path = cwd.endsWith("/") ? cwd + dirPath : cwd + "/" + dirPath;
+                const directoryContents = await this.client.getDirectoryContents(path);
                 const entries = "data" in directoryContents ? directoryContents.data : directoryContents;
 
                 // iterate over the entries to get the files and directories
@@ -714,6 +940,21 @@ class RecCli {
                     }
                     break;
                 }
+            case "lsw":
+            case "cdw":
+            case "mkdirw":
+            case "rmdirw":
+            case "unwrapw":
+                {
+                    if (len === 1) {
+                        return {
+                            prefix: prefix,
+                            suffix: suffix,
+                            completions: (await this.getPathCompletions(suffix, "pfs")).filter(c => c.endsWith("/"))
+                        };
+                    }
+                    break;
+                }
             // len === 1 and file or directory
             case "rm":
             case "recycle":
@@ -725,6 +966,19 @@ class RecCli {
                             prefix: prefix,
                             suffix: suffix,
                             completions: await this.getPathCompletions(suffix, "rfs")
+                        };
+                    }
+                    break;
+                }
+            case "rmw":
+            case "renamew":
+            case "duw":
+                {
+                    if (len === 1) {
+                        return {
+                            prefix: prefix,
+                            suffix: suffix,
+                            completions: await this.getPathCompletions(suffix, "pfs")
                         };
                     }
                     break;
@@ -747,6 +1001,24 @@ class RecCli {
                             prefix: prefix,
                             suffix: suffix,
                             completions: (await this.getPathCompletions(suffix, "rfs")).filter(c => c.endsWith("/"))
+                        };
+                    }
+                    break;
+                }
+            case "cpw":
+            case "mvw":
+                {
+                    if (len === 1) {
+                        return {
+                            prefix: prefix,
+                            suffix: suffix,
+                            completions: await this.getPathCompletions(suffix, "pfs")
+                        };
+                    } else if (len === 2) {
+                        return {
+                            prefix: prefix,
+                            suffix: suffix,
+                            completions: (await this.getPathCompletions(suffix, "pfs")).filter(c => c.endsWith("/"))
                         };
                     }
                     break;
