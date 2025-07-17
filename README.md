@@ -9,6 +9,7 @@ reccli-ts 是一个基于 TypeScript 的 USTC Rec 云盘服务的命令行界面
 - **快速上传**：相比于原有的网页端需要提前计算 md5，并且仅支持串行上传，reccli-ts 则直接通过并行上传的方式跑满带宽，极大地提高了上传速度。
   - 实测在 Windows 11 系统，千兆有线校园网下，传输单个约 38GB 的大文件时，使用 reccli-ts 上传时间仅有**不到 8 分钟**，而使用 Rec 网页端上传则需要**超过 43 分钟**，其中计算 md5 的时间就占据了 **11 分钟左右**。
   - 使用 reccli-ts 上传时，网络速率几乎可以跑满带宽，而 Rec 网页端上传时，网络速率仅有最多不到 50% 的带宽占用率，具体对比如下图所示（来源 Windows 11 任务管理器）：
+- **Seafile 新云盘访问**：为适应旧的 Rec 云盘向新的 Seafile 云盘的迁移，在 v1.5.0 版本后，reccli-ts 支持访问新的云盘服务，用户可以使用非常方便的办法从 Rec 云盘迁移到新的 Seafile 云盘上去。
 
 ![优化前网络速率](docs/before.png)  
 ![优化后网络速率](docs/after.png)  
@@ -59,6 +60,18 @@ help [command]
 help download
 ```
 
+在 v1.5.0 后，新增 Seafile 网盘访问功能，需要在 pan.ustc.edu.cn 中开启 WebDav 并使用以下指令登录：
+
+```bash
+reccli-ts webdav-login -d
+```
+
+由于设计问题，新网盘和旧网盘的目录结构不好合并成一个，因此在使用 reccli-ts 时，同一个 CLI 实例会通过两套指令分别操作旧网盘和新网盘。
+
+比如 `ls` `cd` 等指令仍用于在 Rec 网盘上操作，而 `lsw` `cdw` 等指令则用于在 Seafile 网盘上操作，两者唯一的区别就是后缀的 `w`，表示 WebDav。
+
+CLI 的 Prompt 将两个网盘的当前目录分开显示，比如 `/cloud/[/share]>` 表示在 Rec 网盘的 `/cloud` 目录下，同时在 Seafile 网盘的 `/share` 目录下。
+
 ## 结构
 
 reccli-ts 的根目录由以下几个次根目录组成：
@@ -69,6 +82,8 @@ reccli-ts 的根目录由以下几个次根目录组成：
 - `group`：用户所在群组根目录
 
 需要注意的是，只有 `save` 指令才能从 `group` 文件夹下保存文件或文件夹到 `cloud` 文件夹下，其他文件操作指令只能在**同一个**组或者个人云盘内操作，如果非要实现，必须先 `download`，再 `upload` 才能实现。
+
+在 v1.5.0 版本后，reccli-ts 支持访问新的 Seafile 云盘服务，其架构只有存储库概念，扁平化存放在根目录下，因此不过多说明。
 
 ## 例子
 
@@ -83,12 +98,28 @@ reccli-ts run -c "download /cloud ."
 但是，由于权限问题，如果想要将某个群组云盘以文件夹的形式下载下来，你必须将有下载权限的根目录一个一个下载下来：
 
 ```bash
-reccli-ts run -c "download /group/{group_name}/{group_root_folder} ."
+reccli-ts run -c "download /group/{group_name} ."
 ```
 
-将 `{group_name}` 替换为实际的群组名，`{group_root_folder}` 替换为实际的群组根目录文件夹名，这条指令会将根目录下载为当前目录下的 `{group_root_folder}` 文件夹。
+将 `{group_name}` 替换为实际的群组名，这条指令会将根目录下载为当前目录下的 `{group_name}` 文件夹。
 
-其中 `{group_name}` 和 `{group_root_folder}` 需要您手动 `ls` 看一下，记得空格是需要用 `\` 转义的。
+其中 `{group_name}` 需要您手动 `ls` 看一下，记得空格是需要用 `\` 转义的。
+
+在 v1.5.0 版本后，如果你想要将 Rec 网盘的个人资料迁移到 Seafile 网盘，可以使用以下指令：
+
+```bash
+reccli-ts run -c "transfer /cloud /{database}" "unwrapw /{database}/cloud"
+```
+
+其中 `{database}` 是您自己创建的 Seafile 资料库名称。
+
+如果你想要将 Rec 网盘的群组资料迁移到 Seafile 网盘，可以使用以下指令：
+
+```bash
+reccli-ts run -c "transfer /group/{group_name} /{database}" "unwrapw /{database}/{group_name}"
+```
+
+其中 `{group_name}` 是您要迁移的群组名，`{database}` 是您自己创建的群组的 Seafile 资料库名称，需要您手动 `lsw` 看一下，记得所有参数中的空格是需要用 `\` 转义的。
 
 ## 注意事项
 
