@@ -619,27 +619,18 @@ class RecFileSystem {
         }
 
         // then mv all files in the folder to the parent folder
-        const mv = files.data.map(file => {
-            const from = "/" + path.map(f => f.name).join("/") + "/" + file.name;
-            const to = "/" + path.slice(0, -1).map(f => f.name).join("/");
-            console.log(`[INFO] ${from} -> ${to}`);
-            return this.mv(from, to);
+        const parentFolder = parentPath[parentPath.length - 1];
+        const moves = files.data.map(file => {
+            return this.api.operationByIdType("move", [{ id: file.id, type: file.type }], parentFolder.id, parentFolder.diskType, parentFolder.groupId);
         });
         // wait for all mv to finish and catch result/error
-        const results = await Promise.allSettled(mv);
+        const results = await Promise.allSettled(moves);
         // if any mv failed, then return the error
-        const errors = results.map(r => {
-            if (r.status === "rejected") {
-                return r.reason;
-            } else if (r.value.stat === false) {
-                return r.value.msg;
-            }
-            return null;
-        });
-        if (errors.some(e => e)) {
+        const errors = results.filter(r => r.status === "rejected").map(r => r.reason);
+        if (errors.length > 0) {
             return {
                 stat: false,
-                msg: `unwrap failed: ${errors.filter(e => e).join(", ")}`
+                msg: `unwrap failed: ${errors.join(", ")}`
             };
         }
 
