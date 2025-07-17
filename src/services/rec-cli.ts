@@ -2,7 +2,7 @@ import RecAPI, { FileType } from "@services/rec-api.js";
 import RecFileSystem from "@services/rec-file-system.js";
 import readline, { CompleterResult, Interface } from "readline";
 import { exit } from "process";
-import { resolveFullPath, resolveRecFullPath } from "@utils/path-resolver.js";
+import { resolveFullPath, resolvePanDavFullPath, resolveRecFullPath } from "@utils/path-resolver.js";
 import { TableFormatter } from "@utils/table-formatter.js";
 import { byteToSize } from "@utils/byte-to-size.js";
 import fs from "fs";
@@ -596,7 +596,7 @@ class RecCli {
                 if (!this.client) {
                     throw new Error("Please first login to Pan WebDav with 'webdav-login' command.");
                 }
-                const transfer = await this.rfs.transfer(src, dst, this.client);
+                const transfer = await this.rfs.transfer(src, resolvePanDavFullPath(this.pfs!, dst), this.client);
                 if (!transfer.stat) {
                     throw new Error(`transfer: ${transfer.msg}`);
                 }
