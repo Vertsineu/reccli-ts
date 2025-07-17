@@ -9,7 +9,7 @@ import fs from "fs";
 import { RecFileCache } from "@services/rec-file-cache.js";
 import { Readable, Writable } from "stream";
 import { parseShellCommand, escapeToShell, unescapeFromShell } from "@utils/shell-parser.js";
-import { PanDavClient } from "./pan-dav.js";
+import { PanDavClient } from "./pan-dav-api.js";
 
 type Command = {
     desc: string,

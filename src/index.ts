@@ -3,7 +3,7 @@
 import RecAPI from "@services/rec-api.js";
 import * as userAuthSaver from "@services/rec-user-auth-saver.js";
 import * as panDavAuthSaver from "@services/pan-dav-auth-saver.js";
-import { createPanDavClient, PanDavAuth } from "@services/pan-dav.js";
+import { createPanDavClient, PanDavAuth } from "@services/pan-dav-api.js";
 import RecCli from "@services/rec-cli.js";
 import { Command } from "commander";
 import inquirer from "inquirer";

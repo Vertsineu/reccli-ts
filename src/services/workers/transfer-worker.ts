@@ -1,7 +1,7 @@
 import RecAPI, { DiskType, FileType, UserAuth } from "@services/rec-api.js";
 import { parentPort, workerData } from "worker_threads";
 import { downloadToWebDav } from "@utils/downloader.js";
-import { createPanDavClient, PanDavAuth } from "@services/pan-dav.js";
+import { createPanDavClient, PanDavAuth } from "@services/pan-dav-api.js";
 
 export type TransferWorkerData = {
     // serializable user auth for constructing RecAPI and RecFileSystem
@@ -66,7 +66,7 @@ parentPort!.on("message", async (msg: TransferWorkerMessage) => {
                     type: f.type,
                     path: path + "/" + (f.type === "folder" ? f.name : f.file_ext ? f.name + "." + f.file_ext : f.name)
                 }));
-                
+
                 // return tasks
                 parentPort!.postMessage({
                     type: "finish",
@@ -91,7 +91,7 @@ parentPort!.on("message", async (msg: TransferWorkerMessage) => {
             // exit
             process.exit(0);
         }
-        
+
     } catch (e) {
         // error occurs
         console.log(e);

@@ -6,7 +6,7 @@ import { Worker } from "worker_threads";
 import path from 'path';
 import { fileURLToPath } from "url";
 import { UploadTask, UploadWorkerMessage } from "./workers/upload-worker.js";
-import { PanDavClient } from "./pan-dav.js";
+import { PanDavClient } from "./pan-dav-api.js";
 import { TransferTask, TransferWorkerMessage } from "./workers/transfer-worker.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -27,7 +27,7 @@ export const roles = [
     // can only download file self uploaded
     { label: "仅上传", download: true, upload: true },    // 仅上传
     { label: "仅预览", download: false, upload: false },  // 仅预览
-    { label: "发布", download: true, upload: true},     // 发布
+    { label: "发布", download: true, upload: true },     // 发布
     { label: "管理者", download: true, upload: true },    // 管理者
 ]
 
@@ -44,7 +44,7 @@ export type RecFile = {
     lastModified: string
 }
 
-export type RetType<T> = 
+export type RetType<T> =
     { stat: true, data: T } |
     { stat: false, msg: string }
 
@@ -104,7 +104,7 @@ class RecFileSystem {
 
     constructor(
         private api: RecAPI
-    ) {}
+    ) { }
 
     // calcPath can be a file or a folder
     private async calcPath(path: string): Promise<RecFile[] | null> {
@@ -748,7 +748,7 @@ class RecFileSystem {
                                 while (queue.length > 0) {
                                     const index = ready.indexOf(true);
                                     if (index === -1) return;
-                                    const task = queue.shift(); 
+                                    const task = queue.shift();
                                     ready[index] = false;
                                     workers[index].postMessage({ type: "task", index: index, task: task });
                                 }
@@ -984,7 +984,7 @@ class RecFileSystem {
             const directoryContents = await client.getDirectoryContents(dest);
             const stats = "data" in directoryContents ? directoryContents.data : directoryContents;
 
-            if(stats.some(s => s.basename === file.name)) {
+            if (stats.some(s => s.basename === file.name)) {
                 throw new Error(`file with the same name exists in ${dest}`);
             }
 

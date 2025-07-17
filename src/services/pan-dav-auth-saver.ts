@@ -1,7 +1,7 @@
 import fs from "fs"
 import crypto from 'crypto';
 import { homedir } from "os";
-import { PanDavAuth } from "@services/pan-dav.js"
+import { PanDavAuth } from "@services/pan-dav-api.js"
 
 const dirPath = `${homedir()}/.reccli-ts`;
 const defaultPath = dirPath + "/pandav-default";

@@ -1,4 +1,4 @@
-import { PanDavClient } from "@services/pan-dav.js";
+import { PanDavClient } from "@services/pan-dav-api.js";
 import axios from "axios";
 import fs from "fs";
 import { Readable, Stream } from "stream";
