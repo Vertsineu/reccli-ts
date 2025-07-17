@@ -64,6 +64,11 @@ const commands: { [key: string]: Command } = {
         usage: "rmdir <folder>",
         args: 1
     },
+    unwrap: {
+        desc: "unwrap a folder, move all files and folders in the folder to the parent folder",
+        usage: "unwrap <folder>",
+        args: 1
+    },
     recycle: {
         desc: "move file or folder from cloud to recycle bin",
         usage: "recycle <file|folder>",
@@ -294,9 +299,21 @@ class RecCli {
                 if (!path) {
                     throw new Error(`Usage: ${commands[cmd].usage}`);
                 }
-                const rmdir = await this.rfs.rm(path ?? "");
+                const rmdir = await this.rfs.rm(path);
                 if (!rmdir.stat) {
                     throw new Error(`rmdir: ${rmdir.msg}`);
+                }
+                this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
+                break;
+            }
+            case "unwrap": {
+                const path = args[0];
+                if (!path) {
+                    throw new Error(`Usage: ${commands[cmd].usage}`);
+                }
+                const unwrap = await this.rfs.unwrap(path);
+                if (!unwrap.stat) {
+                    throw new Error(`unwrap: ${unwrap.msg}`);
                 }
                 this.rfc.clearCache(resolveRecFullPath(this.rfs, path), false);
                 break;
@@ -686,6 +703,7 @@ class RecCli {
             case "cd":
             case "mkdir":
             case "rmdir":
+            case "unwrap":
                 {
                     if (len === 1) {
                         return {

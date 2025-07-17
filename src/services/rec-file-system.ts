@@ -573,6 +573,92 @@ class RecFileSystem {
         };
     }
 
+    public async unwrap(src: string): Promise<RetType<void>> {
+        const path = await this.calcPath(src);
+        // if path is null or path is root, then unwrap failed
+        if (!path || path.length === 0) return {
+            stat: false,
+            msg: `${src} not found`
+        };
+        const folder = path[path.length - 1];
+        // if path is a root folder or groupRoot, then unwrap failed
+        if (folder.id === "0" || folder === groupRoot) return {
+            stat: false,
+            msg: `cannot unwrap root folder or group root folder`
+        };
+        // if file is not a folder, then unwrap failed
+        if (folder.type !== "folder") return {
+            stat: false,
+            msg: `${src} is not a folder`
+        };
+        // if file is in recycle, then unwrap failed
+        if (path[0].diskType === "recycle") return {
+            stat: false,
+            msg: `cannot unwrap a file in recycle`
+        };
+
+        // first list files in the folder
+        const files = await this.lsc(path);
+        if (!files.stat) return {
+            stat: false,
+            msg: `cannot list files in ${src}`
+        };
+        // if any file with the same name exists in the parent folder, then unwrap failed
+        const parentPath = path.slice(0, -1);
+        const parentFiles = await this.lsc(parentPath);
+        if (!parentFiles.stat) return {
+            stat: false,
+            msg: `cannot list files in parent folder of ${src}`
+        };
+        const nameSet = new Set(parentFiles.data.map(f => f.name));
+        if (files.data.some(f => nameSet.has(f.name))) {
+            return {
+                stat: false,
+                msg: `file with the same name exists in parent folder of ${src}`
+            };
+        }
+
+        // then mv all files in the folder to the parent folder
+        const mv = files.data.map(file => {
+            const from = "/" + path.map(f => f.name).join("/") + "/" + file.name;
+            const to = "/" + path.slice(0, -1).map(f => f.name).join("/");
+            console.log(`[INFO] ${from} -> ${to}`);
+            return this.mv(from, to);
+        });
+        // wait for all mv to finish and catch result/error
+        const results = await Promise.allSettled(mv);
+        // if any mv failed, then return the error
+        const errors = results.map(r => {
+            if (r.status === "rejected") {
+                return r.reason;
+            } else if (r.value.stat === false) {
+                return r.value.msg;
+            }
+            return null;
+        });
+        if (errors.some(e => e)) {
+            return {
+                stat: false,
+                msg: `unwrap failed: ${errors.filter(e => e).join(", ")}`
+            };
+        }
+
+        // last remove the folder itself
+        const rm = await this.rm(src);
+        // if rm failed, then return the error
+        if (!rm.stat) {
+            return {
+                stat: false,
+                msg: `unwrap failed: ${rm.msg}`
+            };
+        }
+
+        return {
+            stat: true,
+            data: undefined
+        };
+    }
+
     // dest must be a folder
     // upload src file to dest folder
     public async upload(src: string, dest: string): Promise<RetType<void>> {
