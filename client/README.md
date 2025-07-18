@@ -5,7 +5,7 @@ A modern web interface for managing file transfers between Rec Cloud and PanDav 
 ## Features
 
 - **Dual File System Explorer**: Browse both Rec Cloud and PanDav WebDAV directories side by side
-- **Interactive Transfer Management**: Select files from Rec and transfer them to PanDav with drag-and-drop simplicity
+- **Interactive Transfer Management**: Select files from Rec and transfer them to PanDav with intuitive click-to-select interface
 - **Real-time Transfer Monitoring**: Watch transfer progress with live updates on speed, progress, and estimated time
 - **Transfer Controls**: Start, pause, resume, cancel, and restart transfers as needed
 - **Modern UI**: Clean, responsive design built with React, TypeScript, and Tailwind CSS
@@ -13,11 +13,12 @@ A modern web interface for managing file transfers between Rec Cloud and PanDav 
 ## Technology Stack
 
 - **Frontend**: React 18 + TypeScript
-- **Build Tool**: Vite
+- **Build Tool**: Vite (dev server on port 5173)
 - **Styling**: Tailwind CSS
 - **Icons**: Lucide React
 - **HTTP Client**: Axios
 - **Animations**: Framer Motion
+- **Security**: localhost-only access (127.0.0.1)
 
 ## Getting Started
 
@@ -37,13 +38,37 @@ npm run client:install
 npm run client
 ```
 
-The frontend will be available at http://localhost:3001
+The frontend will be available at <http://localhost:5173>
 
 ### Building for Production
 
 ```bash
 npm run client:build
 ```
+
+## Quick Start
+
+For the easiest setup, use the provided scripts in the project root:
+
+1. **Initialize the project** (first time only):
+```bash
+./init.sh
+```
+
+2. **Run in development mode**:
+```bash
+./run.sh dev
+```
+   - Frontend dev server: <http://localhost:5173>
+   - Backend API server: <http://localhost:3000>
+
+3. **Run in production mode**:
+```bash
+./run.sh
+```
+   - Application available at: <http://localhost:3000>
+
+> **Note**: Both frontend and backend are configured to only accept connections from localhost (127.0.0.1) for security reasons.
 
 ## Usage
 
@@ -74,19 +99,34 @@ The frontend communicates with the Rec Transfer Server through REST APIs:
 - `POST /api/login` - User authentication
 - `POST /api/logout` - User logout
 
+### Health Check
+- `GET /health` - Server health check
+
 ### File System Operations
 - `GET /api/rec/list` - List Rec Cloud files
+- `POST /api/rec/copy` - Copy Rec files
+- `POST /api/rec/move` - Move Rec files
+- `DELETE /api/rec/delete` - Delete Rec files
+- `POST /api/rec/mkdir` - Create directory in Rec
+- `POST /api/rec/rename` - Rename Rec files
 - `GET /api/pandav/list` - List PanDav WebDAV files
-- Various CRUD operations for both file systems
+- `POST /api/pandav/copy` - Copy PanDav files
+- `POST /api/pandav/move` - Move PanDav files
+- `DELETE /api/pandav/delete` - Delete PanDav files
+- `POST /api/pandav/mkdir` - Create directory in PanDav
+- `POST /api/pandav/rename` - Rename PanDav files
 
 ### Transfer Management
 - `POST /api/transfer/create` - Create transfer task
-- `POST /api/transfer/:id/start` - Start transfer
-- `POST /api/transfer/:id/pause` - Pause transfer
-- `POST /api/transfer/:id/resume` - Resume transfer
-- `POST /api/transfer/:id/cancel` - Cancel transfer
-- `GET /api/transfer/:id/status` - Get transfer status
+- `POST /api/transfer/:taskId/start` - Start transfer
+- `POST /api/transfer/:taskId/pause` - Pause transfer
+- `POST /api/transfer/:taskId/resume` - Resume transfer
+- `POST /api/transfer/:taskId/cancel` - Cancel transfer
+- `POST /api/transfer/:taskId/restart` - Restart transfer
+- `GET /api/transfer/:taskId` - Get transfer details
+- `GET /api/transfer/:taskId/status` - Get transfer status
 - `GET /api/transfers` - Get all transfers
+- `DELETE /api/transfer/:taskId` - Delete transfer
 
 ## Development
 
@@ -156,6 +196,21 @@ Tailwind CSS provides utility-first styling with custom components:
 - Responsive design for mobile and desktop
 - Custom animations and transitions
 
+## Security Configuration
+
+This application is configured with localhost-only access for enhanced security:
+
+- **Frontend Dev Server**: Binds to `127.0.0.1:5173` (development mode)
+- **Backend API Server**: Binds to `127.0.0.1:3000` (all modes)
+- **Production Mode**: Serves frontend and API on `127.0.0.1:3000`
+
+This configuration ensures that:
+- Only local machine can access the application
+- External network access is blocked
+- Suitable for personal use and development
+
+If you need to access the application from other devices on your network, you would need to modify the server configuration files.
+
 ## Troubleshooting
 
 ### Common Issues
@@ -163,6 +218,7 @@ Tailwind CSS provides utility-first styling with custom components:
 1. **Connection Error**: Ensure the Rec Transfer Server is running on port 3000
 2. **Authentication Failed**: Verify your Rec and WebDAV credentials
 3. **Transfer Stuck**: Check network connection and server logs
+4. **Cannot Access from External Network**: The application is configured for localhost-only access for security reasons
 
 ### Debug Mode
 
