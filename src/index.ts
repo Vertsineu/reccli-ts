@@ -5,6 +5,7 @@ import * as userAuthSaver from "@services/rec-user-auth-saver.js";
 import * as panDavAuthSaver from "@services/pan-dav-auth-saver.js";
 import { createPanDavClient, PanDavAuth } from "@services/pan-dav-api.js";
 import RecCli from "@services/rec-cli.js";
+import RecServer from "@services/rec-server.js";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import { exit } from "process";
@@ -155,6 +156,42 @@ program
 
         const cli = new RecCli(api, client);
         cli.run();
+    });
+
+program
+    .command("server")
+    .option("-p, --port <port>", "server port", "3000")
+    .description("start the Rec Cloud Service HTTP server")
+    .action(async (options) => {
+        try {
+            const port = parseInt(options.port);
+            console.log("🚀 Starting Rec Cloud Service HTTP Server...");
+
+            const server = new RecServer(port);
+            await server.start();
+
+            console.log("✅ Server started successfully!");
+            console.log(`📡 Server is running on http://localhost:${port}`);
+            console.log("📚 API endpoints:");
+            console.log("  - POST /api/login - Login with credentials");
+            console.log("  - GET  /api/rec/list - List Rec files");
+            console.log("  - GET  /api/pandav/list - List PanDav files");
+            console.log("  - POST /api/transfer/create - Create transfer task");
+            console.log("  - GET  /api/transfers - Get all transfer tasks");
+            console.log("  - GET  /health - Health check");
+            console.log("");
+            console.log("💡 Use Ctrl+C to stop the server");
+
+            // Keep the process running
+            process.on('SIGINT', () => {
+                console.log("\n🛑 Server is shutting down...");
+                process.exit(0);
+            });
+
+        } catch (error) {
+            console.error("❌ Failed to start server:", error);
+            exit(1);
+        }
     });
 
 program.parse(process.argv);

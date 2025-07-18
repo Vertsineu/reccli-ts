@@ -8,6 +8,10 @@ import { fileURLToPath } from "url";
 import { UploadTask, UploadWorkerMessage } from "./workers/upload-worker.js";
 import { PanDavClient } from "./pan-dav-api.js";
 import { TransferTask, TransferWorkerMessage } from "./workers/transfer-worker.js";
+import { PauseSignal } from "@utils/pause-signal.js";
+
+// Progress callback type
+export type ProgressCallback = (filePath: string, transferred: number, rate: number) => void;
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -941,7 +945,7 @@ class RecFileSystem {
     }
 
     // dest must be a folder
-    public async transfer(src: string, dest: string, client: PanDavClient): Promise<RetType<void>> {
+    public async transfer(src: string, dest: string, client: PanDavClient, onProgress?: ProgressCallback, abortSignal?: AbortSignal, pauseSignal?: PauseSignal): Promise<RetType<void>> {
         const path = await this.calcPath(src);
         // if path is null or path is root, then transfer failed
         if (!path || path.length === 0) return {
@@ -1001,13 +1005,45 @@ class RecFileSystem {
             }
         }
 
+        // Check if cancelled before starting transfer
+        if (abortSignal?.aborted) {
+            return {
+                stat: false,
+                msg: "Transfer was cancelled"
+            };
+        }
+
         if (file.type === "file") {
+            // Wait if paused
+            while (pauseSignal?.paused) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                // Check for cancellation while paused
+                if (abortSignal?.aborted) {
+                    return {
+                        stat: false,
+                        msg: "Transfer was cancelled"
+                    };
+                }
+            }
+
             const dict = await this.api.getDownloadUrlByIds([file.id], file.groupId);
             const url = dict[file.id];
 
             console.log(`[INFO] ${dest}: transferring`);
-            // transfer file using url
-            await downloadToWebDav(url, dest, client);
+
+            if (onProgress) {
+                // Use custom progress callback with cancellation and pause support
+                await downloadToWebDav(url, dest, client, (transferred, rate) => {
+                    // Check for cancellation during progress updates
+                    if (abortSignal?.aborted) {
+                        throw new Error("Transfer was cancelled");
+                    }
+                    onProgress(dest, transferred, rate);
+                }, abortSignal, pauseSignal);
+            } else {
+                // No progress tracking when onProgress is not provided, but still support cancellation and pause
+                await downloadToWebDav(url, dest, client, undefined, abortSignal, pauseSignal);
+            }
         } else if (file.type === "folder") {
             // multithread transfer using worker_thread
             const count = 4;
@@ -1029,52 +1065,202 @@ class RecFileSystem {
             // construct task queue
             const queue: TransferTask[] = [];
 
+            // Flag to track if transfer was cancelled
+            let cancelled = false;
+
+            // Set up cancellation handler
+            if (abortSignal) {
+                abortSignal.addEventListener('abort', () => {
+                    cancelled = true;
+                    // Stop all workers
+                    workers.forEach(w => {
+                        w.postMessage({ type: "exit" });
+                        w.terminate();
+                    });
+                });
+            }
+
+            // Set up pause/resume event listeners for efficient event-driven control
+            const pauseListener = () => {
+                if (!cancelled) {
+                    workers.forEach(w => {
+                        w.postMessage({ type: "pause" });
+                    });
+                }
+            };
+
+            const resumeListener = () => {
+                if (!cancelled) {
+                    workers.forEach(w => {
+                        w.postMessage({ type: "resume" });
+                    });
+                }
+            };
+
+            // Add event listeners if pauseSignal is provided
+            if (pauseSignal) {
+                pauseSignal.on('pause', pauseListener);
+                pauseSignal.on('resume', resumeListener);
+            }
+
+            // Progress tracking for multiple workers
+            const workerProgress = new Map<number, { path: string, transferred: number, rate: number, completedSize: number }>();
+            const completedFiles = new Set<string>();
+            let lastProgressUpdate = Date.now();
+
             // construct promise for all task finish
             const finished = new Promise<void>((resolve, reject) => {
                 // deal with message from worker
                 workers.forEach(worker => {
                     worker.on("message", (msg: TransferWorkerMessage) => {
-                        const { type } = msg;
-                        if (type === "finish") {
-                            // set ready flag
-                            ready[msg.index] = true;
-                            // add tasks to queue
-                            queue.push(...msg.tasks);
+                        // Check if cancelled
+                        if (cancelled) {
+                            reject(new Error("Transfer was cancelled"));
+                            return;
+                        }
 
-                            // try to allocate tasks to all ready workers
-                            while (queue.length > 0) {
-                                const index = ready.indexOf(true);
-                                if (index === -1) return;
-                                const task = queue.shift();
-                                ready[index] = false;
-                                workers[index].postMessage({ type: "task", index: index, task: task });
+                        // Wait if paused
+                        const checkPauseAndContinue = async () => {
+                            while (pauseSignal?.paused && !cancelled) {
+                                await new Promise(resolve => setTimeout(resolve, 100));
                             }
 
-                            // task queue is empty, then check if it is all finished
-                            if (ready.some(r => !r)) return;
+                            if (cancelled) {
+                                reject(new Error("Transfer was cancelled"));
+                                return;
+                            }
 
-                            // if all finished, then stop all workers 
-                            workers.forEach(w => {
-                                w.postMessage({ type: "exit" })
-                                w.terminate();
-                            });
-                            resolve();
-                        } else if (type === "error") {
-                            // if error, then stop all workers
-                            workers.forEach(w => {
-                                w.postMessage({ type: "exit" })
-                                w.terminate();
-                            });
-                            // and then throw error
-                            reject(msg.error);
-                        }
+                            const { type } = msg;
+                            if (type === "finish") {
+                                // When a worker finishes, update its completed size
+                                const currentProgress = workerProgress.get(msg.index);
+                                if (currentProgress) {
+                                    // Add the last file's size to completed size
+                                    // For files, use the actual transferred amount as the final size
+                                    const finalSize = currentProgress.transferred;
+                                    currentProgress.completedSize += finalSize;
+                                    // Reset current transferred for next file
+                                    currentProgress.transferred = 0;
+                                    currentProgress.rate = 0;
+                                    workerProgress.set(msg.index, currentProgress);
+
+                                    // Send final progress update for this completed file
+                                    if (onProgress && !cancelled && !pauseSignal?.paused) {
+                                        let totalTransferred = 0;
+                                        let totalRate = 0;
+                                        let activeWorkers = 0;
+
+                                        for (const [workerIndex, progress] of workerProgress.entries()) {
+                                            totalTransferred += progress.completedSize + progress.transferred;
+                                            if (progress.rate > 0) {
+                                                totalRate += progress.rate;
+                                                activeWorkers++;
+                                            }
+                                        }
+
+                                        onProgress(
+                                            currentProgress.path,
+                                            totalTransferred,
+                                            activeWorkers > 0 ? Math.floor(totalRate) : 0
+                                        );
+                                    }
+                                }
+
+                                // set ready flag
+                                ready[msg.index] = true;
+                                // add tasks to queue
+                                queue.push(...msg.tasks);
+
+                                // try to allocate tasks to all ready workers
+                                while (queue.length > 0 && !cancelled && !pauseSignal?.paused) {
+                                    const index = ready.indexOf(true);
+                                    if (index === -1) return;
+                                    const task = queue.shift();
+                                    ready[index] = false;
+                                    workers[index].postMessage({ type: "task", index: index, task: task });
+                                }
+
+                                // task queue is empty, then check if it is all finished
+                                if (ready.some(r => !r)) return;
+
+                                // if all finished, then stop all workers 
+                                workers.forEach(w => {
+                                    w.postMessage({ type: "exit" })
+                                    w.terminate();
+                                });
+                                // Clean up event listeners
+                                if (pauseSignal) {
+                                    pauseSignal.off('pause', pauseListener);
+                                    pauseSignal.off('resume', resumeListener);
+                                }
+                                // Clear progress tracking
+                                workerProgress.clear();
+                                resolve();
+                            } else if (type === "progress") {
+                                // Handle progress updates from workers
+                                if (onProgress && !cancelled && !pauseSignal?.paused) {
+                                    // Update progress for this specific worker
+                                    const existingProgress = workerProgress.get(msg.index);
+                                    workerProgress.set(msg.index, {
+                                        path: msg.path,
+                                        transferred: msg.transferred,
+                                        rate: msg.rate,
+                                        completedSize: existingProgress?.completedSize || 0
+                                    });
+
+                                    const now = Date.now();
+                                    // Throttle progress updates to avoid overwhelming the UI (update every 100ms)
+                                    if (now - lastProgressUpdate < 100) return;
+                                    lastProgressUpdate = now;
+
+                                    // Calculate aggregated progress across all active workers
+                                    let totalTransferred = 0;
+                                    let totalRate = 0;
+                                    let activeWorkers = 0;
+                                    let currentFilePath = msg.path; // Use the current file being processed
+
+                                    for (const [workerIndex, progress] of workerProgress.entries()) {
+                                        // Add completed size + current file progress
+                                        totalTransferred += progress.completedSize + progress.transferred;
+                                        if (progress.rate > 0) {
+                                            totalRate += progress.rate;
+                                            activeWorkers++;
+                                        }
+                                    }
+
+                                    // Report aggregated progress
+                                    onProgress(
+                                        currentFilePath,
+                                        totalTransferred,
+                                        activeWorkers > 0 ? Math.floor(totalRate) : 0
+                                    );
+                                }
+                            } else if (type === "failed") {
+                                // if transfer failed, then stop all workers
+                                workers.forEach(w => {
+                                    w.postMessage({ type: "exit" })
+                                    w.terminate();
+                                });
+                                // Clean up event listeners
+                                if (pauseSignal) {
+                                    pauseSignal.off('pause', pauseListener);
+                                    pauseSignal.off('resume', resumeListener);
+                                }
+                                // reject with detailed error message
+                                reject(new Error(`Transfer failed: ${msg.error}${msg.taskPath ? ` (Path: ${msg.taskPath})` : ''}`));
+                            }
+                        };
+
+                        checkPauseAndContinue().catch(reject);
                     });
                 });
             });
 
             // start the first task
-            ready[0] = false;
-            workers[0].postMessage({ type: "task", index: 0, task: task });
+            if (!cancelled) {
+                ready[0] = false;
+                workers[0].postMessage({ type: "task", index: 0, task: task });
+            }
 
             // wait for all finished
             await finished;
