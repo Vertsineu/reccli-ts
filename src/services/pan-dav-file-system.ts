@@ -96,6 +96,10 @@ class PanDavFileSystem {
         return dir + "/" + name;
     }
 
+    public getClient(): PanDavClient {
+        return this.client;
+    }
+
     // list directory contents
     public async ls(src: string): Promise<RetType<PanDavFile[]>> {
         const targetPath = this.normalizePath(src);

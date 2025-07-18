@@ -150,6 +150,10 @@ class RecFileSystem {
         return [path.slice(0, index), path.slice(index + 1)];
     }
 
+    public getApi(): RecAPI {
+        return this.api;
+    }
+
     // get current working directory
     public pwd(): RetType<string> {
         return {
