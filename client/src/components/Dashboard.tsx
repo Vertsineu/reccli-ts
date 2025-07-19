@@ -8,10 +8,8 @@ import { apiClient } from '@/services/api';
 
 const Dashboard: React.FC = () => {
     const { user, logout } = useAuth();
-    // 跨目录文件选择的数据结构
-    const [selectedRecFilesByPath, setSelectedRecFilesByPath] = useState<Map<string, FileItem[]>>(new Map());
+    // 跨目录文件选择的数据结构 - 直接存储所有选中的文件
     const [selectedRecFilesTotal, setSelectedRecFilesTotal] = useState<FileItem[]>([]);
-    const [selectedPanDavFiles, setSelectedPanDavFiles] = useState<FileItem[]>([]);
     const [selectedPanDavPath, setSelectedPanDavPath] = useState<string>('');
     const [transfers, setTransfers] = useState<TransferTask[]>([]);
     const [transferring, setTransferring] = useState(false);
@@ -21,8 +19,17 @@ const Dashboard: React.FC = () => {
     const [calculatingRecSize, setCalculatingRecSize] = useState(false);
     const [clearRecSelection, setClearRecSelection] = useState(false);
     const [clearPanDavSelection, setClearPanDavSelection] = useState(false);
+    const [refreshPanDav, setRefreshPanDav] = useState(false);
 
-    // Auto-refresh transfers every 500ms for smoother progress updates
+    // 用 Map 来跟踪各个路径的文件选择，但不作为状态存储
+    const selectedRecFilesByPathRef = React.useRef<Map<string, FileItem[]>>(new Map());
+    const selectedRecSizesByPathRef = React.useRef<Map<string, number>>(new Map());
+
+    // PanDav 也需要跨文件夹选择支持
+    const selectedPanDavFilesByPathRef = React.useRef<Map<string, FileItem[]>>(new Map());
+    const [selectedPanDavFilesTotal, setSelectedPanDavFilesTotal] = useState<FileItem[]>([]);
+
+    // Smart polling: faster when active tasks, slower when idle (1s/3s intervals)
     useEffect(() => {
         let interval: NodeJS.Timeout;
 
@@ -30,35 +37,49 @@ const Dashboard: React.FC = () => {
             try {
                 const tasks = await apiClient.getAllTransfers();
 
-                // Auto-delete completed tasks (after 3 seconds delay)
+                // Auto-delete completed tasks (after 5 seconds delay to allow animation)
                 await autoDeleteCompletedTasks(tasks);
 
-                // Filter out completed tasks from display
-                const activeTasks = tasks.filter(task => task.status !== 'completed');
-                setTransfers(activeTasks);
+                // Show all tasks including completed ones (TransferMonitor will handle fade animation)
+                setTransfers(tasks);
 
                 // Auto-start pending tasks if there are running tasks with capacity
+                const activeTasks = tasks.filter(task => task.status !== 'completed');
                 await autoStartPendingTasks(activeTasks);
+
+                // Clear existing interval
+                if (interval) clearInterval(interval);
+
+                // Determine polling frequency based on task activity
+                const hasActiveTasks = tasks.some(task =>
+                    task.status === 'running' || task.status === 'pending'
+                );
+                const pollingInterval = hasActiveTasks ? 1000 : 3000; // 1s for active, 3s for idle
+
+                // Set new interval with updated frequency
+                interval = setInterval(fetchTransfers, pollingInterval);
             } catch (error) {
                 console.error('Failed to fetch transfers:', error);
+                // Continue with default interval on error
+                if (interval) clearInterval(interval);
+                interval = setInterval(fetchTransfers, 3000); // Use 3s for error recovery
             }
         };
 
         fetchTransfers();
-        interval = setInterval(fetchTransfers, 500);
 
         return () => {
             if (interval) clearInterval(interval);
         };
     }, []);
 
-    // Auto-delete completed tasks after a short delay
+    // Auto-delete completed tasks after a delay to allow for animation
     const autoDeleteCompletedTasks = async (tasks: TransferTask[]) => {
         const now = Date.now();
         const completedTasks = tasks.filter(task =>
             task.status === 'completed' &&
             task.completedAt &&
-            (now - new Date(task.completedAt).getTime()) > 3000 // 3 seconds delay
+            (now - new Date(task.completedAt).getTime()) > 3000 // 3 seconds delay for fade animation
         );
 
         for (const task of completedTasks) {
@@ -94,72 +115,99 @@ const Dashboard: React.FC = () => {
     };
 
     const handleRecFileSelect = (files: FileItem[], currentPath: string) => {
-        // 更新当前路径的选中文件
-        setSelectedRecFilesByPath(prev => {
-            const newMap = new Map(prev);
-            if (files.length > 0) {
-                newMap.set(currentPath, files);
-            } else {
-                newMap.delete(currentPath);
-            }
-            return newMap;
-        });
+        // 更新当前路径的选中文件并计算总文件列表
+        const filesByPath = selectedRecFilesByPathRef.current;
 
-        // 更新总的选中文件列表
-        setSelectedRecFilesByPath(prev => {
-            const newMap = new Map(prev);
-            if (files.length > 0) {
-                newMap.set(currentPath, files);
-            } else {
-                newMap.delete(currentPath);
-            }
+        if (files.length > 0) {
+            filesByPath.set(currentPath, files);
+        } else {
+            filesByPath.delete(currentPath);
+        }
 
-            // 计算所有路径下的文件总数
-            const totalFiles: FileItem[] = [];
-            for (const [path, pathFiles] of newMap.entries()) {
-                // 为每个文件添加路径信息
-                const filesWithPath = pathFiles.map(file => ({
-                    ...file,
-                    // 添加完整路径信息用于传输
-                    fullPath: path ? `${path}/${file.name}` : file.name,
-                    sourcePath: path
-                }));
-                totalFiles.push(...filesWithPath);
-            }
+        // 计算所有路径下的文件总数
+        const totalFiles: FileItem[] = [];
+        for (const [path, pathFiles] of filesByPath.entries()) {
+            // 为每个文件添加路径信息
+            const filesWithPath = pathFiles.map(file => ({
+                ...file,
+                // 添加完整路径信息用于传输
+                fullPath: path ? `${path}/${file.name}` : file.name,
+                sourcePath: path
+            }));
+            totalFiles.push(...filesWithPath);
+        }
 
-            setSelectedRecFilesTotal(totalFiles);
-            return newMap;
-        });
+        setSelectedRecFilesTotal(totalFiles);
+    };
+
+    // 清除 Rec 所有路径的选择
+    const handleClearRecSelection = () => {
+        selectedRecFilesByPathRef.current.clear();
+        selectedRecSizesByPathRef.current.clear();
+        setSelectedRecFilesTotal([]);
+        setSelectedRecFilesSize(0);
+        setClearRecSelection(true);
+        setTimeout(() => setClearRecSelection(false), 100);
     };
 
     const handlePanDavFileSelect = (files: FileItem[], currentPath: string) => {
-        setSelectedPanDavFiles(files);
-        // Also update the path for deletion purposes
+        // 更新当前路径的选中文件并计算总文件列表（类似 Rec 的逻辑）
+        const filesByPath = selectedPanDavFilesByPathRef.current;
+
+        if (files.length > 0) {
+            filesByPath.set(currentPath, files);
+        } else {
+            filesByPath.delete(currentPath);
+        }
+
+        // 计算所有路径下的文件总数
+        const totalFiles: FileItem[] = [];
+        for (const [path, pathFiles] of filesByPath.entries()) {
+            // 为每个文件添加路径信息
+            const filesWithPath = pathFiles.map(file => ({
+                ...file,
+                // 添加完整路径信息用于删除
+                fullPath: path ? `${path}/${file.name}` : file.name,
+                sourcePath: path
+            }));
+            totalFiles.push(...filesWithPath);
+        }
+
+        // 更新总的选中文件列表
+        setSelectedPanDavFilesTotal(totalFiles);
+        // 保持向后兼容，同时更新原来的状态
+        setSelectedPanDavFilesTotal(totalFiles);
+        // 更新路径为最后操作的路径
         setSelectedPanDavPath(currentPath);
     };
 
-    // 跨目录大小计算
-    const [selectedRecSizesByPath, setSelectedRecSizesByPath] = useState<Map<string, number>>(new Map());
+    // 清除 PanDav 所有路径的选择
+    const handleClearPanDavSelection = () => {
+        selectedPanDavFilesByPathRef.current.clear();
+        setSelectedPanDavFilesTotal([]);
+        setClearPanDavSelection(true);
+        setTimeout(() => setClearPanDavSelection(false), 100);
+    };
 
     const handleRecSizeCalculated = (size: number, calculating: boolean, path?: string) => {
+        console.log(`[SIZE CALC] Path: ${path}, Size: ${size}, Calculating: ${calculating}`);
+
         if (path !== undefined) {
             // 更新特定路径的大小
-            setSelectedRecSizesByPath(prev => {
-                const newMap = new Map(prev);
-                if (size > 0) {
-                    newMap.set(path, size);
-                } else {
-                    newMap.delete(path);
-                }
+            const sizesByPath = selectedRecSizesByPathRef.current;
+            if (size > 0) {
+                sizesByPath.set(path, size);
+            } else {
+                sizesByPath.delete(path);
+            }
 
-                // 计算总大小
-                const totalSize = Array.from(newMap.values()).reduce((sum, pathSize) => sum + pathSize, 0);
-                setSelectedRecFilesSize(totalSize);
-
-                return newMap;
-            });
+            // 计算总大小
+            const totalSize = Array.from(sizesByPath.values()).reduce((sum, pathSize) => sum + pathSize, 0);
+            console.log(`[SIZE CALC] Total size updated to: ${totalSize}, from paths:`, Array.from(sizesByPath.entries()));
+            setSelectedRecFilesSize(totalSize);
         } else {
             // 兼容原来的调用方式
+            console.log(`[SIZE CALC] Legacy mode: ${size}`);
             setSelectedRecFilesSize(size);
         }
         setCalculatingRecSize(calculating);
@@ -203,7 +251,7 @@ const Dashboard: React.FC = () => {
 
             // Clear selection after creating transfers
             setSelectedRecFilesTotal([]);
-            setSelectedRecFilesByPath(new Map());
+            selectedRecFilesByPathRef.current.clear(); // 清除 ref 中的数据
             setSelectedRecFilesSize(0);
             setClearRecSelection(true);
 
@@ -228,26 +276,19 @@ const Dashboard: React.FC = () => {
     };
 
     const handleTaskUpdate = async () => {
-        try {
-            const tasks = await apiClient.getAllTransfers();
-            const activeTasks = tasks.filter(task => task.status !== 'completed');
-            setTransfers(activeTasks);
-
-            // Auto-start pending tasks after manual refresh
-            await autoStartPendingTasks(activeTasks);
-        } catch (error) {
-            console.error('Failed to refresh transfers:', error);
-        }
+        // No need to fetch immediately since we already have smart polling
+        // The polling interval will pick up changes automatically within 2-5 seconds
+        console.log('Task update requested - handled by smart polling');
     };
 
     const handleDeletePanDavFiles = async () => {
-        if (selectedPanDavFiles.length === 0) {
+        if (selectedPanDavFilesTotal.length === 0) {
             alert('Please select files from PanDav to delete');
             return;
         }
 
         const confirmed = window.confirm(
-            `Are you sure you want to delete ${selectedPanDavFiles.length} file(s)? This action cannot be undone.`
+            `Are you sure you want to delete ${selectedPanDavFilesTotal.length} file(s)? This action cannot be undone.`
         );
 
         if (!confirmed) return;
@@ -255,20 +296,27 @@ const Dashboard: React.FC = () => {
         setDeletingPanDav(true);
 
         try {
-            // Delete each selected file
-            for (const file of selectedPanDavFiles) {
-                const filePath = selectedPanDavPath ? `${selectedPanDavPath}/${file.name}` : file.name;
+            // Delete each selected file using their full path
+            for (const file of selectedPanDavFilesTotal) {
+                const filePath = (file as any).fullPath || file.name;
                 await apiClient.panDavDeleteFile(filePath);
             }
 
-            // Clear selection after deleting
-            setSelectedPanDavFiles([]);
+            // Clear all selections after deleting
+            setSelectedPanDavFilesTotal([]);
+            selectedPanDavFilesByPathRef.current.clear();
             setClearPanDavSelection(true);
 
-            // Reset the clear flag after a short delay
-            setTimeout(() => setClearPanDavSelection(false), 100);
+            // Trigger PanDav refresh to reload the current directory
+            setRefreshPanDav(true);
 
-            alert(`Successfully deleted ${selectedPanDavFiles.length} file(s)`);
+            // Reset the flags after a short delay
+            setTimeout(() => {
+                setClearPanDavSelection(false);
+                setRefreshPanDav(false);
+            }, 100);
+
+            alert(`Successfully deleted ${selectedPanDavFilesTotal.length} file(s)`);
         } catch (error: any) {
             console.error('Delete failed:', error);
             alert(`Delete failed: ${error.response?.data?.error || error.message}`);
@@ -333,6 +381,7 @@ const Dashboard: React.FC = () => {
                         title="Rec Cloud Storage"
                         onFileSelect={handleRecFileSelect}
                         onSizeCalculated={handleRecSizeCalculated}
+                        onClearAllSelection={handleClearRecSelection}
                         allowSelection={true}
                         clearSelection={clearRecSelection}
                         className="h-96"
@@ -347,9 +396,12 @@ const Dashboard: React.FC = () => {
                         title="PanDav WebDAV Storage"
                         onFileSelect={handlePanDavFileSelect}
                         onPathChange={handlePanDavPathChange}
+                        onClearAllSelection={handleClearPanDavSelection}
                         allowSelection={true}
                         clearSelection={clearPanDavSelection}
+                        refreshTrigger={refreshPanDav}
                         className="h-96"
+                        globalSelectedCount={selectedPanDavFilesTotal.length}
                     />
                 </div>
 
@@ -397,18 +449,18 @@ const Dashboard: React.FC = () => {
                             )}
 
                             {/* PanDav Delete Control */}
-                            {selectedPanDavFiles.length > 0 && (
+                            {selectedPanDavFilesTotal.length > 0 && (
                                 <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                                     <p className="text-sm text-red-800 mb-2">
-                                        Selected {selectedPanDavFiles.length} file(s) from PanDav for deletion
+                                        Selected {selectedPanDavFilesTotal.length} file(s) from PanDav for deletion
                                     </p>
                                     <div className="flex flex-wrap gap-2 mb-2">
-                                        {selectedPanDavFiles.map((file) => (
+                                        {selectedPanDavFilesTotal.map((file, index) => (
                                             <span
-                                                key={file.id}
+                                                key={`${(file as any).fullPath || file.name}-${index}`}
                                                 className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-red-100 text-red-700"
                                             >
-                                                {file.name}
+                                                {(file as any).fullPath || file.name}
                                             </span>
                                         ))}
                                     </div>
@@ -445,7 +497,7 @@ const Dashboard: React.FC = () => {
                             </button>
 
                             {/* Delete PanDav Files Button */}
-                            {selectedPanDavFiles.length > 0 && (
+                            {selectedPanDavFilesTotal.length > 0 && (
                                 <button
                                     onClick={handleDeletePanDavFiles}
                                     disabled={deletingPanDav}
@@ -459,7 +511,7 @@ const Dashboard: React.FC = () => {
                                     ) : (
                                         <>
                                             <Trash2 className="w-4 h-4" />
-                                            Delete Selected ({selectedPanDavFiles.length})
+                                            Delete Selected ({selectedPanDavFilesTotal.length})
                                         </>
                                     )}
                                 </button>

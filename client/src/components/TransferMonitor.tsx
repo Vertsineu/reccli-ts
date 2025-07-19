@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Play,
     Pause,
@@ -21,7 +21,87 @@ interface TransferMonitorProps {
 }
 
 const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, maxConcurrent = 4 }) => {
-    const formatBytes = (bytes: number): string => {
+    // 跟踪正在淡出的任务
+    const [fadingTasks, setFadingTasks] = useState<Set<string>>(new Set());
+    // 跟踪需要隐藏的任务（淡出动画完成后从DOM移除）
+    const [hiddenTasks, setHiddenTasks] = useState<Set<string>>(new Set());
+    // 跟踪组件初始化时已完成的任务（避免页面刷新后重新动画）
+    const [initiallyCompletedTasks, setInitiallyCompletedTasks] = useState<Set<string>>(new Set());
+
+    // 初始化时记录已完成的任务
+    useEffect(() => {
+        const completedTasks = tasks.filter(task => task.status === 'completed');
+        const initialCompleted = new Set(completedTasks.map(t => t.id));
+        setInitiallyCompletedTasks(initialCompleted);
+        // 立即隐藏初始就已完成的任务
+        setHiddenTasks(initialCompleted);
+    }, []); // 只在组件挂载时运行一次
+
+    // 检测新完成的任务并触发淡出动画
+    useEffect(() => {
+        const completedTasks = tasks.filter(task => task.status === 'completed');
+
+        completedTasks.forEach(task => {
+            if (!fadingTasks.has(task.id) && !hiddenTasks.has(task.id)) {
+                // 如果这是初始就完成的任务，直接隐藏，不播放动画
+                if (initiallyCompletedTasks.has(task.id)) {
+                    setHiddenTasks(prev => new Set(prev).add(task.id));
+                } else {
+                    // 这是新完成的任务，播放淡出动画
+                    setTimeout(() => {
+                        setFadingTasks(prev => new Set(prev).add(task.id));
+
+                        // 淡出动画完成后隐藏任务，然后删除
+                        setTimeout(() => {
+                            setHiddenTasks(prev => new Set(prev).add(task.id));
+
+                            // 再延迟一点时间确保动画完全结束，然后删除任务
+                            setTimeout(async () => {
+                                try {
+                                    await apiClient.deleteTransfer(task.id);
+                                    onTaskUpdate(); // 刷新任务列表
+                                } catch (error) {
+                                    console.error('Failed to delete completed transfer:', error);
+                                }
+                            }, 100); // 等待100ms确保DOM操作完成
+                        }, 800); // 淡出动画持续0.8秒
+                    }, 500);
+                }
+            }
+        });
+
+        // 清理不再存在的任务的状态
+        const existingTaskIds = new Set(tasks.map(t => t.id));
+        setFadingTasks(prev => {
+            const newSet = new Set<string>();
+            for (const taskId of prev) {
+                if (existingTaskIds.has(taskId)) {
+                    newSet.add(taskId);
+                }
+            }
+            return newSet;
+        });
+
+        setHiddenTasks(prev => {
+            const newSet = new Set<string>();
+            for (const taskId of prev) {
+                if (existingTaskIds.has(taskId)) {
+                    newSet.add(taskId);
+                }
+            }
+            return newSet;
+        });
+
+        setInitiallyCompletedTasks(prev => {
+            const newSet = new Set<string>();
+            for (const taskId of prev) {
+                if (existingTaskIds.has(taskId)) {
+                    newSet.add(taskId);
+                }
+            }
+            return newSet;
+        });
+    }, [tasks]); const formatBytes = (bytes: number): string => {
         if (bytes === 0) return '0 B';
         const k = 1024;
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -199,15 +279,17 @@ const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, 
 
     const getTotalSpeed = (): number => {
         return tasks
-            .filter(task => task.status === 'running')
+            .filter(task => task.status === 'running' && !hiddenTasks.has(task.id))
             .reduce((sum, task) => sum + task.speed, 0);
     };
 
     const getActiveTasksCount = (): { running: number; pending: number; paused: number; total: number } => {
-        const running = tasks.filter(task => task.status === 'running').length;
-        const pending = tasks.filter(task => task.status === 'pending').length;
-        const paused = tasks.filter(task => task.status === 'paused').length;
-        const total = tasks.length;
+        // 只计算可见的任务
+        const visibleTasks = tasks.filter(task => !hiddenTasks.has(task.id));
+        const running = visibleTasks.filter(task => task.status === 'running').length;
+        const pending = visibleTasks.filter(task => task.status === 'pending').length;
+        const paused = visibleTasks.filter(task => task.status === 'paused').length;
+        const total = visibleTasks.length;
         return { running, pending, paused, total };
     };
 
@@ -256,10 +338,10 @@ const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, 
                 </div>
 
                 {/* Bulk Action Buttons */}
-                {tasks.length > 0 && (
+                {getActiveTasksCount().total > 0 && (
                     <div className="flex items-center gap-2">
                         {/* Start All Button */}
-                        {tasks.some(task => task.status === 'pending') && (
+                        {tasks.some(task => task.status === 'pending' && !hiddenTasks.has(task.id)) && (
                             <button
                                 onClick={() => handleBulkAction('start')}
                                 className="flex items-center gap-1 px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -271,7 +353,7 @@ const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, 
                         )}
 
                         {/* Resume All Button */}
-                        {tasks.some(task => task.status === 'paused') && (
+                        {tasks.some(task => task.status === 'paused' && !hiddenTasks.has(task.id)) && (
                             <button
                                 onClick={() => handleBulkAction('resume')}
                                 className="flex items-center gap-1 px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -283,7 +365,7 @@ const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, 
                         )}
 
                         {/* Pause All Button */}
-                        {tasks.some(task => task.status === 'running') && (
+                        {tasks.some(task => task.status === 'running' && !hiddenTasks.has(task.id)) && (
                             <button
                                 onClick={() => handleBulkAction('pause')}
                                 className="flex items-center gap-1 px-3 py-1 text-sm bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
@@ -295,7 +377,7 @@ const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, 
                         )}
 
                         {/* Cancel All Button */}
-                        {tasks.some(task => ['running', 'paused', 'pending'].includes(task.status)) && (
+                        {tasks.some(task => ['running', 'paused', 'pending'].includes(task.status) && !hiddenTasks.has(task.id)) && (
                             <button
                                 onClick={() => handleBulkAction('cancel')}
                                 className="flex items-center gap-1 px-3 py-1 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
@@ -307,7 +389,7 @@ const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, 
                         )}
 
                         {/* Delete All Button */}
-                        {tasks.length > 0 && (
+                        {tasks.filter(task => !hiddenTasks.has(task.id)).length > 0 && (
                             <button
                                 onClick={handleDeleteAll}
                                 className="flex items-center gap-1 px-3 py-1 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
@@ -329,27 +411,44 @@ const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, 
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {tasks.map((task) => {
+                    {tasks.filter(task => !hiddenTasks.has(task.id)).map((task) => {
+                        const isFading = fadingTasks.has(task.id);
+                        const isCompleted = task.status === 'completed';
+
                         return (
                             <div
                                 key={task.id}
-                                className="border border-gray-200 rounded-lg p-4 transition-all duration-300"
+                                className={`border border-gray-200 rounded-lg p-4 transition-all duration-700 transform ${isFading
+                                    ? 'opacity-0 scale-95 -translate-y-2'
+                                    : 'opacity-100 scale-100 translate-y-0'
+                                    } ${isCompleted
+                                        ? 'bg-green-50 border-green-200'
+                                        : 'bg-white'
+                                    }`}
                             >
                                 {/* Task Header */}
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-3">
-                                        {getStatusIcon(task.status)}
+                                        <div className={`${isCompleted && !isFading ? 'animate-pulse' : ''}`}>
+                                            {getStatusIcon(task.status)}
+                                        </div>
                                         <div>
-                                            <h3 className="text-sm font-medium text-gray-900">
+                                            <h3 className={`text-sm font-medium ${isCompleted ? 'text-green-800' : 'text-gray-900'}`}>
                                                 {task.srcPath} → {task.destPath}
                                             </h3>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(task.status)}`}>
                                                     {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                                                    {isCompleted && <span className="ml-1">✨</span>}
                                                 </span>
                                                 <span className="text-xs text-gray-500">
                                                     {formatBytes(task.transferredSize)} / {formatBytes(task.totalSize)}
                                                 </span>
+                                                {isCompleted && task.startedAt && task.completedAt && (
+                                                    <span className="text-xs text-green-600">
+                                                        • {formatDuration((new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime()) / 1000)}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

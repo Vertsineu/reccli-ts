@@ -18,9 +18,11 @@ interface FileExplorerProps {
     onFileSelect?: (files: FileItem[], currentPath: string) => void;
     onPathChange?: (path: string) => void;
     onSizeCalculated?: (size: number, calculating: boolean, path?: string) => void;
+    onClearAllSelection?: () => void; // 清除所有路径的选择
     className?: string;
     allowSelection?: boolean;
     clearSelection?: boolean;
+    refreshTrigger?: boolean; // 触发刷新的标志
     // 全局选中信息（用于跨目录选择的显示）
     globalSelectedCount?: number;
     globalSelectedSize?: number;
@@ -33,9 +35,11 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     onFileSelect,
     onPathChange,
     onSizeCalculated,
+    onClearAllSelection,
     className = '',
     allowSelection = true,
     clearSelection = false,
+    refreshTrigger = false,
     globalSelectedCount,
     globalSelectedSize,
     globalCalculatingSize,
@@ -70,6 +74,13 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     useEffect(() => {
         loadFiles();
     }, [type]);
+
+    // 当刷新触发器变化时重新加载文件
+    useEffect(() => {
+        if (refreshTrigger) {
+            loadFiles(currentPath);
+        }
+    }, [refreshTrigger, currentPath]);
 
     // Clear selection when clearSelection prop changes
     useEffect(() => {
@@ -135,7 +146,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         }
 
         setCalculatingSize(true);
-        onSizeCalculated?.(selectedItemsSize, true);
+        onSizeCalculated?.(0, true, currentPath);
 
         try {
             let totalSize = 0;
@@ -375,14 +386,14 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                     </div>
                 ) : (
                     <div className="space-y-1">
-                        {files.map((file) => {
+                        {files.map((file, index) => {
                             const fileId = `${currentPath}/${file.name}`.replace(/^\//, '');
                             const isSelected = selectedItems.has(fileId);
                             const canBeSelected = canItemBeSelected(file);
 
                             return (
                                 <div
-                                    key={file.id || file.name}
+                                    key={`${currentPath}-${file.name}-${file.type}-${index}`}
                                     className={`file-item ${isSelected ? 'selected' : ''} ${file.type === 'directory' ? 'cursor-pointer' : ''}`}
                                     onClick={(e) => handleItemClick(file, e)}
                                     title={file.type === 'directory' ? 'Click to navigate, Ctrl+Click to select' : 'Click to select'}
@@ -479,17 +490,20 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                                 </>
                             )}
                         </div>
-                        {selectedItems.size > 0 && (
+                        {(selectedItems.size > 0 || (globalSelectedCount && globalSelectedCount > 0)) ? (
                             <button
                                 onClick={() => {
                                     setSelectedItems(new Set());
                                     setSelectedItemsSize(0);
-                                    onFileSelect?.([], currentPath);
+                                    // 清除所有跨目录选择
+                                    onClearAllSelection?.();
                                 }}
                                 className="text-xs text-gray-500 hover:text-gray-700 underline"
                             >
                                 Clear selection
                             </button>
+                        ) : (
+                            <span style={{ minWidth: 0 }}></span>
                         )}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
