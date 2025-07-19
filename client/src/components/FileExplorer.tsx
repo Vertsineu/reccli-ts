@@ -17,10 +17,14 @@ interface FileExplorerProps {
     title: string;
     onFileSelect?: (files: FileItem[], currentPath: string) => void;
     onPathChange?: (path: string) => void;
-    onSizeCalculated?: (size: number, calculating: boolean) => void;
+    onSizeCalculated?: (size: number, calculating: boolean, path?: string) => void;
     className?: string;
     allowSelection?: boolean;
     clearSelection?: boolean;
+    // 全局选中信息（用于跨目录选择的显示）
+    globalSelectedCount?: number;
+    globalSelectedSize?: number;
+    globalCalculatingSize?: boolean;
 }
 
 const FileExplorer: React.FC<FileExplorerProps> = ({
@@ -32,6 +36,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     className = '',
     allowSelection = true,
     clearSelection = false,
+    globalSelectedCount,
+    globalSelectedSize,
+    globalCalculatingSize,
 }) => {
     const [files, setFiles] = useState<FileItem[]>([]);
     const [currentPath, setCurrentPath] = useState('');
@@ -123,7 +130,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     const calculateSelectedItemsSize = async (selectedFileObjects: FileItem[]) => {
         if (type !== 'rec' || selectedFileObjects.length === 0) {
             setSelectedItemsSize(0);
-            onSizeCalculated?.(0, false);
+            onSizeCalculated?.(0, false, currentPath);
             return;
         }
 
@@ -144,13 +151,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 }
             }
             setSelectedItemsSize(totalSize);
-            onSizeCalculated?.(totalSize, false);
+            // Check if all selectable files are selected
+            const selectableFiles = files.filter(f => f.type === 'file');
+            const selectableFileIds = selectableFiles.map(f => `${currentPath}/${f.name}`.replace(/^\//, ''));
+            const allSelected = selectableFiles.length > 0 && selectableFileIds.every(id => selectedItems.has(id));
+            onSizeCalculated?.(totalSize, allSelected, currentPath);
         } catch (error) {
             console.error('Failed to calculate selected items size:', error);
             // Fallback to summing ls sizes
             const fallbackSize = selectedFileObjects.reduce((sum, file) => sum + file.size, 0);
             setSelectedItemsSize(fallbackSize);
-            onSizeCalculated?.(fallbackSize, false);
+            onSizeCalculated?.(fallbackSize, false, currentPath);
         } finally {
             setCalculatingSize(false);
         }
@@ -439,15 +450,33 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                 <div className="border-t border-gray-200 pt-3 mt-3">
                     <div className="flex items-center justify-between">
                         <div className="text-sm text-gray-600">
-                            Selected: {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''}
-                            {selectedItems.size > 0 && type === 'rec' && (
-                                <span className="ml-2">
-                                    ({calculatingSize ? (
-                                        <span className="text-blue-500">calculating...</span>
-                                    ) : (
-                                        <span className="font-medium">{formatFileSize(selectedItemsSize)}</span>
-                                    )})
-                                </span>
+                            {/* 如果提供了全局选中信息，则显示全局信息，否则显示本地信息 */}
+                            {globalSelectedCount !== undefined ? (
+                                <>
+                                    Selected: {globalSelectedCount} item{globalSelectedCount > 1 ? 's' : ''}
+                                    {globalSelectedCount > 0 && type === 'rec' && globalSelectedSize !== undefined && (
+                                        <span className="ml-2">
+                                            ({globalCalculatingSize ? (
+                                                <span className="text-blue-500">calculating...</span>
+                                            ) : (
+                                                <span className="font-medium">{formatFileSize(globalSelectedSize)}</span>
+                                            )})
+                                        </span>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    Selected: {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''}
+                                    {selectedItems.size > 0 && type === 'rec' && (
+                                        <span className="ml-2">
+                                            ({calculatingSize ? (
+                                                <span className="text-blue-500">calculating...</span>
+                                            ) : (
+                                                <span className="font-medium">{formatFileSize(selectedItemsSize)}</span>
+                                            )})
+                                        </span>
+                                    )}
+                                </>
                             )}
                         </div>
                         {selectedItems.size > 0 && (

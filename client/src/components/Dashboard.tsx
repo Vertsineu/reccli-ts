@@ -8,8 +8,9 @@ import { apiClient } from '@/services/api';
 
 const Dashboard: React.FC = () => {
     const { user, logout } = useAuth();
-    const [selectedRecFiles, setSelectedRecFiles] = useState<FileItem[]>([]);
-    const [selectedRecPath, setSelectedRecPath] = useState<string>('');
+    // 跨目录文件选择的数据结构
+    const [selectedRecFilesByPath, setSelectedRecFilesByPath] = useState<Map<string, FileItem[]>>(new Map());
+    const [selectedRecFilesTotal, setSelectedRecFilesTotal] = useState<FileItem[]>([]);
     const [selectedPanDavFiles, setSelectedPanDavFiles] = useState<FileItem[]>([]);
     const [selectedPanDavPath, setSelectedPanDavPath] = useState<string>('');
     const [transfers, setTransfers] = useState<TransferTask[]>([]);
@@ -93,8 +94,42 @@ const Dashboard: React.FC = () => {
     };
 
     const handleRecFileSelect = (files: FileItem[], currentPath: string) => {
-        setSelectedRecFiles(files);
-        setSelectedRecPath(currentPath);
+        // 更新当前路径的选中文件
+        setSelectedRecFilesByPath(prev => {
+            const newMap = new Map(prev);
+            if (files.length > 0) {
+                newMap.set(currentPath, files);
+            } else {
+                newMap.delete(currentPath);
+            }
+            return newMap;
+        });
+
+        // 更新总的选中文件列表
+        setSelectedRecFilesByPath(prev => {
+            const newMap = new Map(prev);
+            if (files.length > 0) {
+                newMap.set(currentPath, files);
+            } else {
+                newMap.delete(currentPath);
+            }
+
+            // 计算所有路径下的文件总数
+            const totalFiles: FileItem[] = [];
+            for (const [path, pathFiles] of newMap.entries()) {
+                // 为每个文件添加路径信息
+                const filesWithPath = pathFiles.map(file => ({
+                    ...file,
+                    // 添加完整路径信息用于传输
+                    fullPath: path ? `${path}/${file.name}` : file.name,
+                    sourcePath: path
+                }));
+                totalFiles.push(...filesWithPath);
+            }
+
+            setSelectedRecFilesTotal(totalFiles);
+            return newMap;
+        });
     };
 
     const handlePanDavFileSelect = (files: FileItem[], currentPath: string) => {
@@ -103,13 +138,35 @@ const Dashboard: React.FC = () => {
         setSelectedPanDavPath(currentPath);
     };
 
-    const handleRecSizeCalculated = (size: number, calculating: boolean) => {
-        setSelectedRecFilesSize(size);
+    // 跨目录大小计算
+    const [selectedRecSizesByPath, setSelectedRecSizesByPath] = useState<Map<string, number>>(new Map());
+
+    const handleRecSizeCalculated = (size: number, calculating: boolean, path?: string) => {
+        if (path !== undefined) {
+            // 更新特定路径的大小
+            setSelectedRecSizesByPath(prev => {
+                const newMap = new Map(prev);
+                if (size > 0) {
+                    newMap.set(path, size);
+                } else {
+                    newMap.delete(path);
+                }
+
+                // 计算总大小
+                const totalSize = Array.from(newMap.values()).reduce((sum, pathSize) => sum + pathSize, 0);
+                setSelectedRecFilesSize(totalSize);
+
+                return newMap;
+            });
+        } else {
+            // 兼容原来的调用方式
+            setSelectedRecFilesSize(size);
+        }
         setCalculatingRecSize(calculating);
     }; const handlePanDavPathChange = (currentPath: string) => {
         setSelectedPanDavPath(currentPath);
     }; const handleStartTransfer = async () => {
-        if (selectedRecFiles.length === 0) {
+        if (selectedRecFilesTotal.length === 0) {
             alert('Please select files from Rec to transfer');
             return;
         }
@@ -124,8 +181,9 @@ const Dashboard: React.FC = () => {
         try {
             // Create all transfer tasks first (without starting them)
             const createdTaskIds: string[] = [];
-            for (const file of selectedRecFiles) {
-                const srcPath = selectedRecPath ? `${selectedRecPath}/${file.name}` : file.name;
+
+            for (const file of selectedRecFilesTotal) {
+                const srcPath = (file as any).fullPath || file.name;
                 const { taskId } = await apiClient.createTransfer(srcPath, selectedPanDavPath);
                 createdTaskIds.push(taskId);
             }
@@ -144,7 +202,8 @@ const Dashboard: React.FC = () => {
             }
 
             // Clear selection after creating transfers
-            setSelectedRecFiles([]);
+            setSelectedRecFilesTotal([]);
+            setSelectedRecFilesByPath(new Map());
             setSelectedRecFilesSize(0);
             setClearRecSelection(true);
 
@@ -277,6 +336,9 @@ const Dashboard: React.FC = () => {
                         allowSelection={true}
                         clearSelection={clearRecSelection}
                         className="h-96"
+                        globalSelectedCount={selectedRecFilesTotal.length}
+                        globalSelectedSize={selectedRecFilesSize}
+                        globalCalculatingSize={calculatingRecSize}
                     />
 
                     {/* PanDav File System */}
@@ -297,25 +359,25 @@ const Dashboard: React.FC = () => {
                         <div className="flex-1">
                             <h3 className="text-lg font-semibold text-gray-900 mb-2">Transfer Control</h3>
 
-                            {selectedRecFiles.length > 0 ? (
+                            {selectedRecFilesTotal.length > 0 ? (
                                 <div className="space-y-2">
                                     <p className="text-sm text-gray-600">
-                                        Selected {selectedRecFiles.length} file(s) ({calculatingRecSize ? (
+                                        Selected {selectedRecFilesTotal.length} file(s) ({calculatingRecSize ? (
                                             <span className="text-blue-500">calculating...</span>
                                         ) : (
                                             <span className="font-medium">{formatFileSize(selectedRecFilesSize)}</span>
                                         )})
-                                        {selectedRecFiles.length > 0 && (
+                                        {selectedRecFilesTotal.length > 0 && (
                                             <span className="ml-2 text-blue-500 text-xs">• Size calculated with du</span>
                                         )}
                                     </p>
                                     <div className="flex flex-wrap gap-2">
-                                        {selectedRecFiles.map((file) => (
+                                        {selectedRecFilesTotal.map((file, index) => (
                                             <span
-                                                key={file.id}
+                                                key={`${(file as any).fullPath || file.name}-${index}`}
                                                 className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-primary-100 text-primary-700"
                                             >
-                                                {file.name}
+                                                {(file as any).fullPath || file.name}
                                             </span>
                                         ))}
                                     </div>
@@ -405,7 +467,7 @@ const Dashboard: React.FC = () => {
 
                             <button
                                 onClick={handleStartTransfer}
-                                disabled={selectedRecFiles.length === 0 || !selectedPanDavPath || transferring}
+                                disabled={selectedRecFilesTotal.length === 0 || !selectedPanDavPath || transferring}
                                 className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {transferring ? (
