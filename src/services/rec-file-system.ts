@@ -1048,7 +1048,7 @@ class RecFileSystem {
             // multithread transfer using worker_thread
             const count = 4;
             // construct workers
-            const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/transfer-worker.js", { workerData: { recAuth: this.api.getUserAuth(), panDavAuth: client.getPanDavAuth() } }));
+            const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/transfer-worker.js", { workerData: { userAuth: this.api.getUserAuth(), recAuth: this.api.getRecAuth(), panDavAuth: client.getPanDavAuth() } }));
 
             // construct ready flag array
             const ready = new Array(count).fill(true);
@@ -1082,19 +1082,19 @@ class RecFileSystem {
 
             // Set up pause/resume event listeners for efficient event-driven control
             const pauseListener = () => {
-                if (!cancelled) {
-                    workers.forEach(w => {
-                        w.postMessage({ type: "pause" });
-                    });
-                }
+                // do nothing when cancelled
+                if (cancelled) return;
+                workers.forEach(w => {
+                    w.postMessage({ type: "pause" });
+                });
             };
 
             const resumeListener = () => {
-                if (!cancelled) {
-                    workers.forEach(w => {
-                        w.postMessage({ type: "resume" });
-                    });
-                }
+                // do nothing when cancelled
+                if (cancelled) return;
+                workers.forEach(w => {
+                    w.postMessage({ type: "resume" });
+                });
             };
 
             // Add event listeners if pauseSignal is provided
@@ -1105,7 +1105,6 @@ class RecFileSystem {
 
             // Progress tracking for multiple workers
             const workerProgress = new Map<number, { path: string, transferred: number, rate: number, completedSize: number }>();
-            const completedFiles = new Set<string>();
             let lastProgressUpdate = Date.now();
 
             // construct promise for all task finish
@@ -1113,18 +1112,20 @@ class RecFileSystem {
                 // deal with message from worker
                 workers.forEach(worker => {
                     worker.on("message", (msg: TransferWorkerMessage) => {
-                        // Check if cancelled
+                        // check if cancelled
                         if (cancelled) {
                             reject(new Error("Transfer was cancelled"));
                             return;
                         }
-
-                        // Wait if paused
-                        const checkPauseAndContinue = async () => {
+                        
+                        // update progress
+                        (async () => {
+                            // check if paused
                             while (pauseSignal?.paused && !cancelled) {
                                 await new Promise(resolve => setTimeout(resolve, 100));
                             }
 
+                            // check if cancelled
                             if (cancelled) {
                                 reject(new Error("Transfer was cancelled"));
                                 return;
@@ -1249,9 +1250,7 @@ class RecFileSystem {
                                 // reject with detailed error message
                                 reject(new Error(`Transfer failed: ${msg.error}${msg.taskPath ? ` (Path: ${msg.taskPath})` : ''}`));
                             }
-                        };
-
-                        checkPauseAndContinue().catch(reject);
+                        })().catch(reject);
                     });
                 });
             });

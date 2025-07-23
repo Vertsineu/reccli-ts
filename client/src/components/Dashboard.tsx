@@ -43,9 +43,8 @@ const Dashboard: React.FC = () => {
                 // Show all tasks including completed ones (TransferMonitor will handle fade animation)
                 setTransfers(tasks);
 
-                // Auto-start pending tasks if there are running tasks with capacity
-                const activeTasks = tasks.filter(task => task.status !== 'completed');
-                await autoStartPendingTasks(activeTasks);
+                // 移除这里的自动启动逻辑，完全交给 TransferMonitor 组件处理
+                // 避免重复启动同一个任务
 
                 // Clear existing interval
                 if (interval) clearInterval(interval);
@@ -92,27 +91,7 @@ const Dashboard: React.FC = () => {
         }
     };
 
-    // Auto-start pending tasks when there's available capacity
-    const autoStartPendingTasks = async (tasks: TransferTask[]) => {
-        const runningTasks = tasks.filter(task => task.status === 'running');
-        const pendingTasks = tasks.filter(task => task.status === 'pending')
-            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-        const availableSlots = maxConcurrent - runningTasks.length;
-
-        if (availableSlots > 0 && pendingTasks.length > 0) {
-            const tasksToStart = pendingTasks.slice(0, availableSlots);
-
-            for (const task of tasksToStart) {
-                try {
-                    console.log(`[AUTO-START] Starting pending task: ${task.id}`);
-                    await apiClient.startTransfer(task.id);
-                } catch (error) {
-                    console.error(`[AUTO-START] Failed to start pending task ${task.id}:`, error);
-                }
-            }
-        }
-    };
+    // 已移除 autoStartPendingTasks 函数，任务自动启动逻辑完全由 TransferMonitor 组件处理
 
     const handleRecFileSelect = (files: FileItem[], currentPath: string) => {
         // 更新当前路径的选中文件并计算总文件列表
@@ -238,10 +217,10 @@ const Dashboard: React.FC = () => {
 
             // Get current running tasks count
             const currentTasks = await apiClient.getAllTransfers();
-            const runningTasksCount = currentTasks.filter(task => task.status === 'running').length;
+            const queuedTasksCount = currentTasks.filter(task => task.status !== 'pending').length;
 
             // Calculate how many new tasks we can start immediately
-            const availableSlots = Math.max(0, maxConcurrent - runningTasksCount);
+            const availableSlots = Math.max(0, maxConcurrent - queuedTasksCount);
             const tasksToStart = createdTaskIds.slice(0, availableSlots);
 
             // Start only the allowed number of tasks

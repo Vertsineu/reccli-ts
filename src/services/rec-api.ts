@@ -24,6 +24,11 @@ export type UserAuth = {
     refreshToken: string
 }
 
+export type RecAuth = {
+    username: string,
+    password: string
+}
+
 export type IdTypePairType = {
     id: string,
     type: FileType
@@ -389,6 +394,7 @@ class RecAPI {
     private readonly signatureToken = "VZPDF6HxKyh0hhqFqY2Tk6udzlambRgK";
     private readonly clientID = "d5485a8c-fecb-11e9-b690-005056b70c02";
 
+    private recAuth?: RecAuth;
     private userAuth!: UserAuth;
 
     /**
@@ -400,9 +406,12 @@ class RecAPI {
         // init with userAuth
         initUserAuth?: UserAuth,
         // callback when token refreshed
-        private refreshedCallback?: (userAuth: UserAuth) => void
+        private refreshedCallback?: (userAuth: UserAuth) => void,
+        // init with recAuth
+        initRecAuth?: RecAuth
     ) {
         if (initUserAuth) this.userAuth = initUserAuth;
+        if (initRecAuth) this.recAuth = initRecAuth;
     }
 
     /**
@@ -411,6 +420,14 @@ class RecAPI {
      */
     public getUserAuth(): UserAuth {
         return this.userAuth;
+    }
+
+    /**
+     * Get RecAuth
+     * @returns RecAuth if exists, otherwise undefined
+     */
+    public getRecAuth(): RecAuth | undefined {
+        return this.recAuth;
     }
 
     /**
@@ -506,6 +523,12 @@ class RecAPI {
         });
 
         if (res.status_code !== HttpStatusCode.Ok) {
+            // if refresh token failed, try to login again
+            if (this.recAuth) {
+                const { username, password } = this.recAuth;
+                await this.login(username, password);
+                return;
+            }
             throw new Error(`Failed to refresh token: ${res.message}`);
         }
 
@@ -575,6 +598,7 @@ class RecAPI {
             authToken: msg_server.x_auth_token,
             refreshToken: msg_server.refresh_token
         };
+        this.recAuth = { username, password }
         if (this.refreshedCallback) this.refreshedCallback(this.userAuth);
     }
 

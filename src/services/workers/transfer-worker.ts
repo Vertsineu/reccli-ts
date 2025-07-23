@@ -1,12 +1,14 @@
-import RecAPI, { DiskType, FileType, UserAuth } from "@services/rec-api.js";
+import RecAPI, { DiskType, FileType, RecAuth, UserAuth } from "@services/rec-api.js";
 import { parentPort, workerData } from "worker_threads";
 import { downloadToWebDav } from "@utils/downloader.js";
 import { createPanDavClient, PanDavAuth } from "@services/pan-dav-api.js";
 import { PauseSignal } from "@utils/pause-signal.js";
+import { Response } from "webdav";
 
 export type TransferWorkerData = {
     // serializable user auth for constructing RecAPI and RecFileSystem
-    recAuth: UserAuth,
+    userAuth: UserAuth,
+    recAuth: RecAuth,
     // serializable pan dav auth for constructing PanDavClient
     panDavAuth: PanDavAuth
 }
@@ -55,19 +57,12 @@ export type TransferWorkerMessage = {
 
 // construct RecAPI and RecFileSystem
 const data = workerData as TransferWorkerData;
-const { recAuth, panDavAuth } = data;
-const api = new RecAPI(recAuth);
+const { userAuth, recAuth, panDavAuth } = data;
+const api = new RecAPI(userAuth, undefined, recAuth);
 const client = createPanDavClient(panDavAuth);
 
 // Worker pause signal
 const pauseSignal = new PauseSignal();
-
-// Function to wait if paused
-const waitIfPaused = async () => {
-    while (pauseSignal.paused) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-    }
-};
 
 parentPort!.on("message", async (msg: TransferWorkerMessage) => {
     try {
@@ -84,7 +79,9 @@ parentPort!.on("message", async (msg: TransferWorkerMessage) => {
 
         if (type === "task") {
             // Wait if paused before processing task
-            await waitIfPaused();
+            while (pauseSignal.paused) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
 
             const { id, diskType, groupId, type, path } = msg.task;
             // if folder, list directory entries and return tasks

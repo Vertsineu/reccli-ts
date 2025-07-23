@@ -37,6 +37,71 @@ const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, 
         setHiddenTasks(initialCompleted);
     }, []); // 只在组件挂载时运行一次
 
+    // 将 ref 声明移到组件顶层，符合 React Hooks 规则
+    const prevRunningTasksCountRef = React.useRef<number>(0);
+    const prevMaxConcurrentRef = React.useRef<number>(maxConcurrent);
+
+    // 当任务完成时自动启动等待中的任务，保持同时运行的任务数量为maxConcurrent
+    useEffect(() => {
+        (async () => {
+            // 获取当前运行中的任务数量
+            const runningTasks = tasks.filter(task => task.status === 'running');
+            const runningTasksCount = runningTasks.length;
+
+            // 获取等待中的任务
+            const pendingTasks = tasks.filter(task => task.status === 'pending')
+                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+            // 检查是否有空闲槽位可以启动等待中的任务
+            const availableSlots = maxConcurrent - runningTasksCount;
+
+            // 检测是否 maxConcurrent 发生了变化
+            const maxConcurrentChanged = maxConcurrent !== prevMaxConcurrentRef.current;
+
+            console.log(`Available slots: ${availableSlots}, Pending tasks: ${pendingTasks.length}, Running: ${runningTasksCount}, Max Changed: ${maxConcurrentChanged}`);
+
+            // 满足以下任一条件时启动新任务:
+            // 1. 有可用槽位、有待处理任务，并且运行中任务数量减少
+            // 2. 最大并发数增加，导致有新的可用槽位
+            if (availableSlots > 0 && pendingTasks.length > 0 && (
+                runningTasksCount < prevRunningTasksCountRef.current ||
+                prevRunningTasksCountRef.current === 0 ||
+                (maxConcurrentChanged && maxConcurrent > prevMaxConcurrentRef.current)
+            )) {
+                const reason = maxConcurrentChanged && maxConcurrent > prevMaxConcurrentRef.current
+                    ? 'Max Concurrent setting increased'
+                    : 'Running tasks count changed';
+
+                console.log(`Auto-starting pending tasks because: ${reason}`);
+
+                // 选择最早创建的待处理任务启动
+                const tasksToStart = pendingTasks.slice(0, availableSlots);
+
+                // 确保我们要启动的任务都是 pending 状态
+                const validTasksToStart = tasksToStart.filter(task => task.status === 'pending');
+
+                if (validTasksToStart.length > 0) {
+                    // 并行启动多个任务
+                    const startPromises = validTasksToStart.map(task => {
+                        console.log(`Auto-starting task: ${task.id}`);
+                        return apiClient.startTransfer(task.id);
+                    });
+
+                    try {
+                        await Promise.all(startPromises);
+                        onTaskUpdate(); // 刷新任务列表
+                    } catch (error) {
+                        console.error('Failed to auto-start pending transfers:', error);
+                    }
+                }
+            }
+
+            // 更新上次运行的任务数量和最大并发数
+            prevRunningTasksCountRef.current = runningTasksCount;
+            prevMaxConcurrentRef.current = maxConcurrent;
+        })();
+    }, [tasks, maxConcurrent, onTaskUpdate]); // 当任务列表或最大并发数改变时重新运行
+
     // 检测新完成的任务并触发淡出动画
     useEffect(() => {
         const completedTasks = tasks.filter(task => task.status === 'completed');
@@ -101,7 +166,9 @@ const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, 
             }
             return newSet;
         });
-    }, [tasks]); const formatBytes = (bytes: number): string => {
+    }, [tasks]);
+
+    const formatBytes = (bytes: number): string => {
         if (bytes === 0) return '0 B';
         const k = 1024;
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -198,30 +265,26 @@ const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, 
             let targetTasks: TransferTask[] = [];
 
             switch (action) {
-                case 'start':
+                case 'start': {
                     // Start pending tasks, respecting max concurrent limit
-                    const runningTasks = tasks.filter(task => task.status === 'running');
+                    const queuedTasks = tasks.filter(task => task.status !== 'pending');
                     const pendingTasks = tasks.filter(task => task.status === 'pending')
                         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-                    const availableSlots = maxConcurrent - runningTasks.length;
+                    // 明确使用传入的maxConcurrent参数，而不是内部固定值
+                    const availableSlots = maxConcurrent - queuedTasks.length;
                     targetTasks = pendingTasks.slice(0, Math.max(0, availableSlots));
                     break;
-
-                case 'pause':
+                }
+                case 'pause': {
                     targetTasks = tasks.filter(task => task.status === 'running');
                     break;
-
-                case 'resume':
+                }
+                case 'resume': {
                     // Resume paused tasks, respecting max concurrent limit
-                    const currentRunningTasks = tasks.filter(task => task.status === 'running');
-                    const pausedTasks = tasks.filter(task => task.status === 'paused')
-                        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-                    const availableSlotsForResume = maxConcurrent - currentRunningTasks.length;
-                    targetTasks = pausedTasks.slice(0, Math.max(0, availableSlotsForResume));
+                    targetTasks = tasks.filter(task => task.status === 'paused');
                     break;
-
+                }
                 case 'cancel':
                     targetTasks = tasks.filter(task =>
                         task.status === 'running' ||

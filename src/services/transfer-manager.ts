@@ -79,14 +79,14 @@ class TransferManager extends EventEmitter {
             throw new Error('Transfer task not found');
         }
 
-        if (task.status === 'running') {
-            throw new Error('Transfer task is already running');
+        if (task.status !== 'pending') {
+            throw new Error('Transfer task has already been run');
         }
 
         // Remove the concurrent transfer limit check - let frontend control this
-        // if (this.runningTasks.size >= this.MAX_CONCURRENT_TRANSFERS) {
-        //     throw new Error('Maximum concurrent transfers reached');
-        // }
+        if (this.runningTasks.size >= this.MAX_CONCURRENT_TRANSFERS) {
+            throw new Error('Maximum concurrent transfers reached');
+        }
 
         task.status = 'running';
         task.startedAt = new Date();
@@ -234,7 +234,7 @@ class TransferManager extends EventEmitter {
 
     public removeTask(taskId: string): boolean {
         const task = this.tasks.get(taskId);
-        if (task && task.status === 'running') {
+        if (task && task.status !== 'pending') {
             this.cancelTransfer(taskId);
         }
 

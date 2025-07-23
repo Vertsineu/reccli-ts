@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Folder,
     File,
@@ -137,6 +137,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         }
     };
 
+    // Track the latest size calculation request
+    const latestRequestIdRef = useRef<number>(0);
+
     // Calculate the actual disk usage of selected items using du
     const calculateSelectedItemsSize = async (selectedFileObjects: FileItem[]) => {
         if (type !== 'rec' || selectedFileObjects.length === 0) {
@@ -148,11 +151,21 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         setCalculatingSize(true);
         onSizeCalculated?.(0, true, currentPath);
 
+        // Create a unique request ID to track this specific calculation request
+        const requestId = Date.now();
+        // Store the current request ID as the latest one
+        latestRequestIdRef.current = requestId;
+
         try {
             let totalSize = 0;
             for (const file of selectedFileObjects) {
                 const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
                 try {
+                    // Skip calculation if this is no longer the latest request
+                    if (latestRequestIdRef.current !== requestId) {
+                        console.log('Skipping outdated size calculation request');
+                        return;
+                    }
                     const duSize = await apiClient.recGetPathSize(filePath);
                     totalSize += duSize;
                 } catch (error) {
@@ -161,20 +174,29 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
                     totalSize += file.size;
                 }
             }
-            setSelectedItemsSize(totalSize);
-            // Check if all selectable files are selected
-            const selectableFiles = files.filter(f => f.type === 'file');
-            const selectableFileIds = selectableFiles.map(f => `${currentPath}/${f.name}`.replace(/^\//, ''));
-            const allSelected = selectableFiles.length > 0 && selectableFileIds.every(id => selectedItems.has(id));
-            onSizeCalculated?.(totalSize, allSelected, currentPath);
+
+            // Only update the UI if this is still the latest request
+            if (latestRequestIdRef.current === requestId) {
+                setSelectedItemsSize(totalSize);
+                // Check if all selectable files are selected
+                const selectableFiles = files.filter(f => f.type === 'file');
+                const selectableFileIds = selectableFiles.map(f => `${currentPath}/${f.name}`.replace(/^\//, ''));
+                const allSelected = selectableFiles.length > 0 && selectableFileIds.every(id => selectedItems.has(id));
+                onSizeCalculated?.(totalSize, allSelected, currentPath);
+            }
         } catch (error) {
             console.error('Failed to calculate selected items size:', error);
-            // Fallback to summing ls sizes
-            const fallbackSize = selectedFileObjects.reduce((sum, file) => sum + file.size, 0);
-            setSelectedItemsSize(fallbackSize);
-            onSizeCalculated?.(fallbackSize, false, currentPath);
+            // Fallback to summing ls sizes if this is still the latest request
+            if (latestRequestIdRef.current === requestId) {
+                const fallbackSize = selectedFileObjects.reduce((sum: number, file: FileItem) => sum + file.size, 0);
+                setSelectedItemsSize(fallbackSize);
+                onSizeCalculated?.(fallbackSize, false, currentPath);
+            }
         } finally {
-            setCalculatingSize(false);
+            // Only update the UI state if this is still the latest request
+            if (latestRequestIdRef.current === requestId) {
+                setCalculatingSize(false);
+            }
         }
     };
 

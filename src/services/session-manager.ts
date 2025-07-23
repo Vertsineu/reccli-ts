@@ -24,12 +24,16 @@ export interface LoginRequest {
 
 class SessionManager {
     private sessions: Map<string, SessionData> = new Map();
-    private readonly SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+    private readonly SESSION_TIMEOUT = 12 * 60 * 60 * 1000; // 12 hours
 
     public async createSession(loginData: LoginRequest): Promise<{ sessionId: string; session: SessionData }> {
         try {
             // Login to Rec API
-            const recApi = new RecAPI();
+            const recAuth = {
+                username: loginData.recAccount,
+                password: loginData.recPassword
+            };
+            const recApi = new RecAPI(undefined, undefined, recAuth);
             await recApi.login(loginData.recAccount, loginData.recPassword);
 
             // Check if login was successful by checking if userAuth is set
