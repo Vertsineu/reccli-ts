@@ -1046,7 +1046,7 @@ class RecFileSystem {
             }
         } else if (file.type === "folder") {
             // multithread transfer using worker_thread
-            const count = 4;
+            const count = 2;
             // construct workers
             const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/transfer-worker.js", { workerData: { userAuth: this.api.getUserAuth(), recAuth: this.api.getRecAuth(), panDavAuth: client.getPanDavAuth() } }));
 

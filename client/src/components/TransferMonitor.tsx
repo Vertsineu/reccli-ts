@@ -20,7 +20,7 @@ interface TransferMonitorProps {
     maxConcurrent?: number;
 }
 
-const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, maxConcurrent = 4 }) => {
+const TransferMonitor: React.FC<TransferMonitorProps> = ({ tasks, onTaskUpdate, maxConcurrent = 2 }) => {
     // 跟踪正在淡出的任务
     const [fadingTasks, setFadingTasks] = useState<Set<string>>(new Set());
     // 跟踪需要隐藏的任务（淡出动画完成后从DOM移除）
