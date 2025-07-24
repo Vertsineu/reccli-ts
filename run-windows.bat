@@ -90,35 +90,22 @@ set "CLIENT_LOG=%PROJECT_ROOT%\logs\reccli-ts-client.log"
 echo [信息] 服务器日志将保存至: %SERVER_LOG%
 echo [信息] 客户端日志将保存至: %CLIENT_LOG%
 
-:: 创建服务器启动脚本（使用PowerShell实现tee功能）
-set "SERVER_SCRIPT=%TEMP%\reccli_server_script.ps1"
-echo $ErrorActionPreference = 'Continue' > "%SERVER_SCRIPT%"
-echo $date = Get-Date -Format "yyyy-MM-dd HH:mm:ss" >> "%SERVER_SCRIPT%"
-echo "启动时间: $date" ^| Tee-Object -FilePath "%SERVER_LOG%" >> "%SERVER_SCRIPT%"
-echo "" ^| Tee-Object -FilePath "%SERVER_LOG%" -Append >> "%SERVER_SCRIPT%"
-echo cd "%PROJECT_ROOT%" >> "%SERVER_SCRIPT%"
-echo $process = Start-Process -FilePath "%NPM_PATH%" -ArgumentList "run", "server" -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\stdout.log" -RedirectStandardError "$env:TEMP\stderr.log" >> "%SERVER_SCRIPT%"
-echo Get-Content "$env:TEMP\stdout.log", "$env:TEMP\stderr.log" -Wait ^| ForEach-Object { $_ ^| Tee-Object -FilePath "%SERVER_LOG%" -Append; Write-Host $_ } >> "%SERVER_SCRIPT%"
+:: 直接启动服务器并重定向输出
+cd /d "%PROJECT_ROOT%"
+echo %date% %time% 服务器启动 > "%SERVER_LOG%"
 
 :: 启动服务器（在新的命令提示符窗口中）
-start "RecCLI Server" powershell -ExecutionPolicy Bypass -File "%SERVER_SCRIPT%"
+start "RecCLI Server" /min cmd /c "cd /d "%PROJECT_ROOT%" && "%NPM_PATH%" run server >> "%SERVER_LOG%" 2>&1"
 echo [成功] 服务器已启动
 
 :: 等待一下确保服务器启动
 timeout /t 2 /nobreak > nul
 
-:: 创建客户端启动脚本（使用PowerShell实现tee功能）
-set "CLIENT_SCRIPT=%TEMP%\reccli_client_script.ps1"
-echo $ErrorActionPreference = 'Continue' > "%CLIENT_SCRIPT%"
-echo $date = Get-Date -Format "yyyy-MM-dd HH:mm:ss" >> "%CLIENT_SCRIPT%"
-echo "启动时间: $date" ^| Tee-Object -FilePath "%CLIENT_LOG%" >> "%CLIENT_SCRIPT%"
-echo "" ^| Tee-Object -FilePath "%CLIENT_LOG%" -Append >> "%CLIENT_SCRIPT%"
-echo cd "%PROJECT_ROOT%" >> "%CLIENT_SCRIPT%"
-echo $process = Start-Process -FilePath "%NPM_PATH%" -ArgumentList "run", "client" -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\client_stdout.log" -RedirectStandardError "$env:TEMP\client_stderr.log" >> "%CLIENT_SCRIPT%"
-echo Get-Content "$env:TEMP\client_stdout.log", "$env:TEMP\client_stderr.log" -Wait ^| ForEach-Object { $_ ^| Tee-Object -FilePath "%CLIENT_LOG%" -Append; Write-Host $_ } >> "%CLIENT_SCRIPT%"
+:: 直接启动客户端并重定向输出
+echo %date% %time% 客户端启动 > "%CLIENT_LOG%"
 
 :: 启动客户端（在新的命令提示符窗口中）
-start "RecCLI Client" powershell -ExecutionPolicy Bypass -File "%CLIENT_SCRIPT%"
+start "RecCLI Client" /min cmd /c "cd /d "%PROJECT_ROOT%" && "%NPM_PATH%" run client >> "%CLIENT_LOG%" 2>&1"
 echo [成功] 客户端已启动
 
 echo.
