@@ -14,7 +14,7 @@ const Dashboard: React.FC = () => {
     const [transfers, setTransfers] = useState<TransferTask[]>([]);
     const [transferring, setTransferring] = useState(false);
     const [deletingPanDav, setDeletingPanDav] = useState(false);
-    const [maxConcurrent, setMaxConcurrent] = useState<number>(4); // Default to 4
+    const [maxConcurrent, setMaxConcurrent] = useState<number>(2); // Default to 2
     const [selectedRecFilesSize, setSelectedRecFilesSize] = useState<number>(0);
     const [calculatingRecSize, setCalculatingRecSize] = useState(false);
     const [clearRecSelection, setClearRecSelection] = useState(false);
