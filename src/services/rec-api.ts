@@ -281,13 +281,13 @@ export type EntityType = {
             created_at: string,
             updated_at: string
         },
-        public_operations: [ string ],
+        public_operations: [ string ] | string,
         resource_operations: [
             {
                 folder_id: string,
                 role_type: number
             },
-        ]
+        ] | string
     },
     findFileFromFirstLevelFolder: EntityType["listById"],
     getFileInfo: {

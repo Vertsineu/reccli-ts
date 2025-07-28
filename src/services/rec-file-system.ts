@@ -200,11 +200,18 @@ class RecFileSystem {
         if (cwd.length == 2 && cwd[0] == groupRoot) {
             const group = cwd[1]; // current group
             const folders = await this.api.listById(group.id, group.diskType, group.groupId);
-            // array of roles
-            const roleIdPairArray: { id: string, role: Role }[] = (await this.api.getPrivilegeByGroupId(group.groupId!)).resource_operations.map(r => ({
-                id: r.folder_id,
-                role: roles[r.role_type]
-            }));
+            const resourcePrivileges = (await this.api.getPrivilegeByGroupId(group.groupId!)).resource_operations;
+            
+            // if owner of the group, privilege is "ALL", otherwise a list of string
+            const roleIdPairArray: { id: string, role: Role }[] = 
+                typeof resourcePrivileges === "string" ? folders.datas.map(f => ({
+                    id: f.number,
+                    role: roles[1] // 拥有者
+                })) : resourcePrivileges.map(r => ({
+                    id: r.folder_id,
+                    role: roles[r.role_type]
+                }));
+
             // dict of roles
             const roleIdPairDict: { [key: string]: Role } = {};
             for (const roleIdPair of roleIdPairArray) {
