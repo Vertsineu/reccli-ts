@@ -564,7 +564,7 @@ class RecAPI {
             client_terminal_type: "client",
             type: "nusoap"
         };
-        const str = "A".repeat(12) + JSON.stringify(loginInfo).replace(/:/g, ": ").replace(/,/g, ", ");
+        const str = "A".repeat(12) + JSON.stringify(loginInfo);
         const encryptedStr = this.aesEncrypt(str);
         let sign = this.signatureToken + this.serializeDict({
             tempticket: tempTicket,
