@@ -3,6 +3,7 @@ import axios from "axios";
 import fs from "fs";
 import { Readable, Stream, Transform } from "stream";
 import { PauseSignal } from "@utils/pause-signal.js";
+import { PausableDownloadStream } from "@utils/stream-utils.js";
 
 export type ProgressCallback = (transferred: number, rate: number) => void;
 
@@ -31,110 +32,73 @@ export async function downloadToWebDav(url: string, dest: string, client: PanDav
         throw new Error('Download was cancelled');
     }
 
-    const response = await axios<Readable>({
-        method: 'GET',
-        url: url,
-        responseType: 'stream', // set response type as 'stream'
-        signal: abortSignal, // Pass AbortSignal to axios
+    // Create a pausable stream that supports resume with Range requests
+    const stream = new PausableDownloadStream(url, pauseSignal, abortSignal);
+
+    // Always calculate progress, regardless of whether onProgress callback exists
+    let transferred = 0;
+    let lastTransferred = 0;
+    const recentRates: number[] = [];
+
+    // Combined transform stream for both flow control and progress tracking
+    const streamControlTransform = new Transform({
+        transform(chunk, encoding, callback) {
+            // check if cancelled
+            if (abortSignal?.aborted) {
+                callback(new Error('Download was cancelled'));
+                return;
+            }
+
+            // Update the transferred bytes counter
+            transferred += chunk.length;
+            
+            // Pass the chunk through
+            callback(null, chunk);
+        }
     });
 
-    const stream = response.data;
+    const progressStream = stream.pipe(streamControlTransform);
 
-    if (onProgress) {
-        let transferred = 0;
-        let lastTransferred = 0;
-        const recentRates: number[] = [];
+    // Set up interval for rate calculation and pause/resume handling - every 200ms
+    const progressInterval = setInterval(() => {
+        const bytesDiff = transferred - lastTransferred;
+        // Calculate bytes per second
+        const currentRate = bytesDiff * 5; // 200ms * 5 = 1 second
 
-        // Set up interval for rate calculation - every 200ms
-        const intervalId = setInterval(() => {
-            // Don't update if paused
-            if (pauseSignal?.paused) return;
-
-            const now = Date.now();
-            const bytesDiff = transferred - lastTransferred;
-            // Calculate bytes per second
-            const currentRate = bytesDiff * 5; // 200ms * 5 = 1 second
-
-            if (bytesDiff > 0) {
-                recentRates.push(currentRate);
-                // Keep only the last 5 rates for smoothing
-                if (recentRates.length > 5) {
-                    recentRates.shift();
-                }
-
-                const avgRate = recentRates.reduce((sum, rate) => sum + rate, 0) / recentRates.length;
-
-                onProgress(transferred, Math.floor(avgRate));
+        if (bytesDiff > 0) {
+            recentRates.push(currentRate);
+            // Keep only the last 5 rates for smoothing
+            if (recentRates.length > 5) {
+                recentRates.shift();
             }
 
-            lastTransferred = transferred;
-        }, 200);
+            const avgRate = recentRates.reduce((sum, rate) => sum + rate, 0) / recentRates.length;
 
-        const progressTransform = new Transform({
-            transform(chunk, encoding, callback) {
-                // check if cancelled
-                if (abortSignal?.aborted) {
-                    callback(new Error('Download was cancelled'));
-                    return;
-                }
+            // Only call onProgress if callback is provided
+            onProgress?.(transferred, Math.floor(avgRate));
+        }
 
-                // update progress
-                (async () => {
-                    // check if paused or cancelled
-                    while (pauseSignal?.paused) {
-                        await new Promise(resolve => setTimeout(resolve, 100));
-                        // Check for cancellation while paused
-                        if (abortSignal?.aborted) {
-                            throw new Error('Download was cancelled');
-                        }
-                    }
+        lastTransferred = transferred;
+    }, 200);
 
-                    // Just update the transferred bytes counter
-                    transferred += chunk.length;
+    // when succeeded
+    progressStream.on('end', () => {
+        // Only call onProgress if callback is provided
+        onProgress?.(transferred, 0);
+    });
 
-                    callback(null, chunk);
-                })().catch(callback);
-            }
+    // when failed
+    abortSignal?.addEventListener('abort', () => {
+        // clear progress
+        onProgress?.(0, 0);
+        stream.destroy();
+        streamControlTransform.destroy();
+        progressStream.destroy();
+    });
+
+    // Create a promise-based approach for partial file updates
+    return client.putFileContents(dest, progressStream)
+        .finally(() => {
+            clearInterval(progressInterval);
         });
-
-        const progressStream = stream.pipe(progressTransform);
-
-        // update rate to 0 when stream ends
-        progressStream.on('end', () => {
-            clearInterval(intervalId);
-            onProgress(transferred, 0);
-        });
-
-        // Handle stream errors and cancellation
-        return new Promise((resolve, reject) => {
-            if (abortSignal) {
-                abortSignal.addEventListener('abort', () => {
-                    clearInterval(intervalId);
-                    stream.destroy();
-                    progressStream.destroy();
-                    reject(new Error('Download was cancelled'));
-                });
-            }
-            client.putFileContents(dest, progressStream)
-                .then(resolve)
-                .catch(error => {
-                    clearInterval(intervalId);
-                    reject(error);
-                });
-        });
-    } else {
-        // Handle stream errors and cancellation for non-progress case
-        return new Promise((resolve, reject) => {
-            if (abortSignal) {
-                abortSignal.addEventListener('abort', () => {
-                    stream.destroy();
-                    reject(new Error('Download was cancelled'));
-                });
-            }
-
-            client.putFileContents(dest, stream)
-                .then(resolve)
-                .catch(reject);
-        });
-    }
 }

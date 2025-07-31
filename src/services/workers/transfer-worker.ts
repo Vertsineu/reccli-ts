@@ -48,6 +48,9 @@ export type TransferWorkerMessage = {
     error: string,
     taskPath?: string
 } | {
+    // pause the worker
+    type: "pause"
+} | {
     // resume the worker
     type: "resume"
 } | {
@@ -71,6 +74,11 @@ const abortSignal = abortController.signal;
 parentPort!.on("message", async (msg: TransferWorkerMessage) => {
     try {
         const { type } = msg;
+
+        if (type === "pause") {
+            pauseSignal.pause();
+            return;
+        }
 
         if (type === "resume") {
             pauseSignal.resume();
