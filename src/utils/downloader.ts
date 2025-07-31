@@ -2,6 +2,7 @@ import { PanDavClient } from "@services/pan-dav-api.js";
 import axios from "axios";
 import fs from "fs";
 import { Readable, Stream, Transform } from "stream";
+import { PauseSignal } from "@utils/pause-signal.js";
 
 export type ProgressCallback = (transferred: number, rate: number) => void;
 
@@ -24,9 +25,7 @@ export async function downloadFile(url: string, dest: string) {
     })
 }
 
-import { PauseSignal } from "@utils/pause-signal.js";
-
-export async function downloadToWebDav(url: string, dest: string, client: PanDavClient, onProgress?: ProgressCallback, abortSignal?: AbortSignal, pauseSignal?: PauseSignal | { readonly paused: boolean }) {
+export async function downloadToWebDav(url: string, dest: string, client: PanDavClient, onProgress?: ProgressCallback, abortSignal?: AbortSignal, pauseSignal?: PauseSignal) {
     // Check if already cancelled
     if (abortSignal?.aborted) {
         throw new Error('Download was cancelled');

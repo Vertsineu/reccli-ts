@@ -64,6 +64,10 @@ const client = createPanDavClient(panDavAuth);
 // Worker pause signal
 const pauseSignal = new PauseSignal();
 
+// Worker abort controller for cancelling operations
+const abortController = new AbortController();
+const abortSignal = abortController.signal;
+
 parentPort!.on("message", async (msg: TransferWorkerMessage) => {
     try {
         const { type } = msg;
@@ -74,6 +78,8 @@ parentPort!.on("message", async (msg: TransferWorkerMessage) => {
         }
 
         if (type === "exit") {
+            // Trigger abort signal before exiting
+            abortController.abort();
             process.exit(0);
         }
 
@@ -84,51 +90,84 @@ parentPort!.on("message", async (msg: TransferWorkerMessage) => {
             }
 
             const { id, diskType, groupId, type, path } = msg.task;
-            // if folder, list directory entries and return tasks
-            if (type === "folder") {
+            
+            // Apply retry strategy at task level for both folders and files
+            let retryCount = 0;
+            const maxRetries = 3;
+
+            while (retryCount < maxRetries) {
                 try {
-                    // execute task - create directory (ignore 409 conflict if already exists)
-                    await client.createDirectory(path);
-                } catch (error: any) {
-                    // Ignore 409 conflict (directory already exists), but fail on other errors
-                    if (error.status !== 409) {
-                        console.error(`[ERROR] Failed to create directory ${path}:`, error);
-                        throw new Error(`Failed to create directory: ${error.message || error}`);
-                    }
-                    console.log(`[INFO] Directory ${path} already exists, continuing...`);
-                }
+                    // if folder, list directory entries and return tasks
+                    if (type === "folder") {
+                        const exists = await client.exists(path);
 
-                // construct tasks
-                const files = (await api.listById(id, diskType, groupId)).datas;
-                const tasks = files.map(f => ({
-                    id: f.number,
-                    diskType: f.disk_type,
-                    groupId: groupId, // extend groupId from parent task
-                    type: f.type,
-                    path: path + "/" + (f.type === "folder" ? f.name : f.file_ext ? f.name + "." + f.file_ext : f.name)
-                }));
+                        // if directory already exists, skip creation
+                        if (exists) {
+                            console.log(`[INFO] ${path}: directory already exists, skipping...`);
+                        } else {
+                            console.log(`[INFO] ${path}: creating directory (attempt ${retryCount + 1}/${maxRetries})`);
+                            await client.createDirectory(path);
+                            console.log(`[INFO] ${path}: directory created`);
+                        }
 
-                // return tasks
-                parentPort!.postMessage({
-                    type: "finish",
-                    index: msg.index,
-                    tasks: tasks
-                });
-            } else if (type === "file") {
-                let retryCount = 0;
-                const maxRetries = 3;
+                        // construct tasks
+                        const files = (await api.listById(id, diskType, groupId)).datas;
+                        const tasks = files.map(f => ({
+                            id: f.number,
+                            diskType: f.disk_type,
+                            groupId: groupId, // extend groupId from parent task
+                            type: f.type,
+                            path: path + "/" + (f.type === "folder" ? f.name : f.file_ext ? f.name + "." + f.file_ext : f.name)
+                        }));
 
-                while (retryCount < maxRetries) {
-                    try {
+                        // return tasks
+                        parentPort!.postMessage({
+                            type: "finish",
+                            index: msg.index,
+                            tasks: tasks
+                        });
+                        break; // Success, exit retry loop
+                    } else if (type === "file") {
                         // execute task
                         const dict = await api.getDownloadUrlByIds([id], groupId);
                         const url = dict[id];
                         console.log(`[INFO] ${path}: transferring (attempt ${retryCount + 1}/${maxRetries})`);
 
-                        // Use the worker's pauseSignal directly for file transfer
-                        await downloadToWebDav(url, path, client, (transferred, rate) => {
-                            // Don't send progress updates if paused
-                            if (!pauseSignal.paused) {
+                        transfer: do {
+                            do {
+                                const exists = await client.exists(path);
+
+                                // log existence check
+                                console.log(`[INFO] ${path}: exists: ${exists}`);
+
+                                // if not exist, then transfer
+                                if (!exists) break;
+
+                                const stat = await client.stat(path);
+                                const currentSize = "data" in stat ? stat.data.size : stat.size;
+                                const info = await api.getFileInfo({ id, type: "file" }, groupId);
+                                const originalSize = info.bytes;
+
+                                // log two sizes
+                                console.log(`[INFO] ${path}: original size = ${originalSize}, current size = ${currentSize}`);
+
+                                // if size matches, skip transfer
+                                if (originalSize === currentSize) {
+                                    console.log(`[INFO] ${path}: file already transferred, skipping...`);
+                                    parentPort!.postMessage({
+                                        type: "progress",
+                                        index: msg.index,
+                                        path: path,
+                                        transferred: currentSize,
+                                        rate: 0
+                                    });
+                                    break transfer;
+                                }
+                            } while (false);
+
+                            console.log(`[INFO] ${path}: transferring file (attempt ${retryCount + 1}/${maxRetries})`);
+                            // Use the worker's pauseSignal and abortSignal for file transfer
+                            await downloadToWebDav(url, path, client, (transferred, rate) => {
                                 parentPort!.postMessage({
                                     type: "progress",
                                     index: msg.index,
@@ -136,10 +175,9 @@ parentPort!.on("message", async (msg: TransferWorkerMessage) => {
                                     transferred: transferred,
                                     rate: rate
                                 });
-                            }
-                        }, undefined, pauseSignal);
-
-                        console.log(`[SUCCESS] ${path}: transfer completed`);
+                            }, abortSignal, pauseSignal);
+                            console.log(`[INFO] ${path}: file transfer completed`);
+                        } while (false);
 
                         // return empty tasks
                         parentPort!.postMessage({
@@ -148,27 +186,31 @@ parentPort!.on("message", async (msg: TransferWorkerMessage) => {
                             tasks: []
                         });
                         break; // Success, exit retry loop
-                    } catch (error: any) {
-                        retryCount++;
-                        console.error(`[ERROR] Failed to transfer file ${path} (attempt ${retryCount}/${maxRetries}):`, error);
+                    }
+                } catch (error: any) {
+                    retryCount++;
+                    const taskType = type === "folder" ? "directory" : "file";
+                    console.error(`[ERROR] Failed to process ${taskType} ${path} (attempt ${retryCount}/${maxRetries}):`, error);
 
-                        if (retryCount >= maxRetries) {
-                            // After max retries, mark as failed
-                            console.error(`[FAILED] Transfer failed after ${maxRetries} attempts for ${path}`);
+                    if (retryCount >= maxRetries) {
+                        // After max retries, mark as failed
+                        console.error(`[FAILED] Task failed after ${maxRetries} attempts for ${path}`);
 
-                            // Send failed message to main thread
-                            parentPort!.postMessage({
-                                type: "failed",
-                                error: `Transfer failed after ${maxRetries} attempts: ${error.message || error}`,
-                                taskPath: path
-                            });
-                            return;
-                        } else {
-                            // Wait before retry (exponential backoff)
-                            const waitTime = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
-                            console.log(`[RETRY] Waiting ${waitTime}ms before retry ${retryCount + 1}/${maxRetries} for ${path}`);
-                            await new Promise(resolve => setTimeout(resolve, waitTime));
-                        }
+                        // Trigger abort signal when task fails after max retries
+                        abortController.abort();
+                        
+                        // Send failed message to main thread
+                        parentPort!.postMessage({
+                            type: "failed",
+                            error: `Task failed after ${maxRetries} attempts: ${error.message || error}`,
+                            taskPath: path
+                        });
+                        return;
+                    } else {
+                        // Wait before retry (exponential backoff)
+                        const waitTime = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
+                        console.log(`[RETRY] Waiting ${waitTime}ms before retry ${retryCount + 1}/${maxRetries} for ${path}`);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
                     }
                 }
             }
@@ -178,6 +220,9 @@ parentPort!.on("message", async (msg: TransferWorkerMessage) => {
         // error occurs - this should mark the transfer as failed
         console.error(`[WORKER ERROR] Fatal error in worker:`, e);
 
+        // Trigger abort signal on fatal error
+        abortController.abort();
+        
         // Try to send failed message if possible
         try {
             parentPort!.postMessage({

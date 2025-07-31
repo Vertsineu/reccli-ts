@@ -995,14 +995,6 @@ class RecFileSystem {
                 throw new Error(`${dest} is not a folder`);
             }
 
-            // if dest contains file with the same name, then transfer failed
-            const directoryContents = await client.getDirectoryContents(dest);
-            const stats = "data" in directoryContents ? directoryContents.data : directoryContents;
-
-            if (stats.some(s => s.basename === file.name)) {
-                throw new Error(`file with the same name exists in ${dest}`);
-            }
-
             // if dest is a folder, then transfer with the name of src
             dest = dest + "/" + file.name;
         } catch (e) {
@@ -1021,18 +1013,6 @@ class RecFileSystem {
         }
 
         if (file.type === "file") {
-            // Wait if paused
-            while (pauseSignal?.paused) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-                // Check for cancellation while paused
-                if (abortSignal?.aborted) {
-                    return {
-                        stat: false,
-                        msg: "Transfer was cancelled"
-                    };
-                }
-            }
-
             const dict = await this.api.getDownloadUrlByIds([file.id], file.groupId);
             const url = dict[file.id];
 
@@ -1041,10 +1021,6 @@ class RecFileSystem {
             if (onProgress) {
                 // Use custom progress callback with cancellation and pause support
                 await downloadToWebDav(url, dest, client, (transferred, rate) => {
-                    // Check for cancellation during progress updates
-                    if (abortSignal?.aborted) {
-                        throw new Error("Transfer was cancelled");
-                    }
                     onProgress(dest, transferred, rate);
                 }, abortSignal, pauseSignal);
             } else {
