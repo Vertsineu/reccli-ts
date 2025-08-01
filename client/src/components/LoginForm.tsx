@@ -8,11 +8,11 @@ const LoginForm: React.FC = () => {
     const [formData, setFormData] = useState<LoginRequest>({
         recAccount: '',
         recPassword: '',
-        webdavAccount: '',
-        webdavPassword: '',
+        panDavAccount: '',
+        panDavPassword: '',
     });
     const [showRecPassword, setShowRecPassword] = useState(false);
-    const [showWebdavPassword, setShowWebdavPassword] = useState(false);
+    const [showPanDavPassword, setShowPanDavPassword] = useState(false);
     const [error, setError] = useState<string>('');
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -100,42 +100,42 @@ const LoginForm: React.FC = () => {
                             </div>
 
                             <div>
-                                <label htmlFor="webdavAccount" className="block text-sm font-medium text-gray-700 mb-2">
-                                    WebDAV Account
+                                <label htmlFor="panDavAccount" className="block text-sm font-medium text-gray-700 mb-2">
+                                    PanDAV Account
                                 </label>
                                 <input
                                     type="text"
-                                    id="webdavAccount"
-                                    name="webdavAccount"
-                                    value={formData.webdavAccount}
+                                    id="panDavAccount"
+                                    name="panDavAccount"
+                                    value={formData.panDavAccount}
                                     onChange={handleChange}
                                     required
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                    placeholder="Enter your WebDAV username"
+                                    placeholder="Enter your PanDAV username"
                                 />
                             </div>
 
                             <div>
-                                <label htmlFor="webdavPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                                    WebDAV Password
+                                <label htmlFor="panDavPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                                    PanDAV Password
                                 </label>
                                 <div className="relative">
                                     <input
-                                        type={showWebdavPassword ? 'text' : 'password'}
-                                        id="webdavPassword"
-                                        name="webdavPassword"
-                                        value={formData.webdavPassword}
+                                        type={showPanDavPassword ? 'text' : 'password'}
+                                        id="panDavPassword"
+                                        name="panDavPassword"
+                                        value={formData.panDavPassword}
                                         onChange={handleChange}
                                         required
                                         className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                                        placeholder="Enter your WebDAV password"
+                                        placeholder="Enter your PanDAV password"
                                     />
                                     <button
                                         type="button"
-                                        onClick={() => setShowWebdavPassword(!showWebdavPassword)}
+                                        onClick={() => setShowPanDavPassword(!showPanDavPassword)}
                                         className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-600"
                                     >
-                                        {showWebdavPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                        {showPanDavPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                     </button>
                                 </div>
                             </div>

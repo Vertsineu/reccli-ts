@@ -27,8 +27,8 @@ export interface TransferTask {
 export interface LoginRequest {
     recAccount: string;
     recPassword: string;
-    webdavAccount: string;
-    webdavPassword: string;
+    panDavAccount: string;
+    panDavPassword: string;
 }
 
 export interface LoginResponse {

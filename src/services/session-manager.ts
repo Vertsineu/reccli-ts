@@ -18,8 +18,8 @@ export interface SessionData {
 export interface LoginRequest {
     recAccount: string;
     recPassword: string;
-    webdavAccount: string;
-    webdavPassword: string;
+    panDavAccount: string;
+    panDavPassword: string;
 }
 
 class SessionManager {
@@ -28,38 +28,31 @@ class SessionManager {
 
     public async createSession(loginData: LoginRequest): Promise<{ sessionId: string; session: SessionData }> {
         try {
-            // Login to Rec API
+            // Prepare authentication objects
             const recAuth = {
                 username: loginData.recAccount,
                 password: loginData.recPassword
             };
-            const recApi = new RecAPI(undefined, undefined, recAuth);
-            await recApi.login(loginData.recAccount, loginData.recPassword);
-
-            // Check if login was successful by checking if userAuth is set
-            const userAuth = recApi.getUserAuth();
-            if (!userAuth) {
-                throw new Error('Rec login failed: Invalid credentials');
-            }
-
-            // Create Rec File System
-            const recFileSystem = new RecFileSystem(recApi);
-
-            // Create PanDav client and file system
             const panDavAuth: PanDavAuth = {
-                username: loginData.webdavAccount,
-                password: loginData.webdavPassword
+                username: loginData.panDavAccount,
+                password: loginData.panDavPassword
             };
 
+            // Initialize clients
+            const recApi = new RecAPI(undefined, undefined, recAuth);
             const panDavClient = createPanDavClient(panDavAuth);
-            const panDavFileSystem = new PanDavFileSystem(panDavClient);
 
-            // Check if WebDav credentials are valid
-            try {
-                await panDavClient.exists("/");
-            } catch (error) {
-                throw new Error(`WebDav login failed: ${String(error)}`);
-            }
+            // Perform parallel login attempts with fail-fast behavior
+            await Promise.all([
+                // Rec API login
+                this.loginRec(recApi, loginData.recAccount, loginData.recPassword),
+                // WebDAV login validation
+                this.loginPanDav(panDavClient)
+            ]);
+
+            // Both logins successful, create file systems
+            const recFileSystem = new RecFileSystem(recApi);
+            const panDavFileSystem = new PanDavFileSystem(panDavClient);
 
             // Generate session ID
             const sessionId = uuidv4();
@@ -84,6 +77,28 @@ class SessionManager {
             return { sessionId, session };
         } catch (error) {
             throw new Error(`Failed to create session: ${String(error)}`);
+        }
+    }
+
+    private async loginRec(recApi: RecAPI, username: string, password: string): Promise<void> {
+        try {
+            await recApi.login(username, password);
+            
+            // Check if login was successful by checking if userAuth is set
+            const userAuth = recApi.getUserAuth();
+            if (!userAuth) {
+                throw new Error('Rec login failed: Invalid credentials or login response');
+            }
+        } catch (error) {
+            throw new Error(`Rec login failed: ${String(error)}`);
+        }
+    }
+
+    private async loginPanDav(panDavClient: any): Promise<void> {
+        try {
+            await panDavClient.exists("/");
+        } catch (error) {
+            throw new Error(`PanDav login failed: ${String(error)}`);
         }
     }
 
