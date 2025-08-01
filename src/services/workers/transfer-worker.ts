@@ -3,7 +3,6 @@ import { parentPort, workerData } from "worker_threads";
 import { downloadToWebDav } from "@utils/downloader.js";
 import { createPanDavClient, PanDavAuth } from "@services/pan-dav-api.js";
 import { PauseSignal } from "@utils/pause-signal.js";
-import { Response } from "webdav";
 
 export type TransferWorkerData = {
     // serializable user auth for constructing RecAPI and RecFileSystem

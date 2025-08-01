@@ -10,7 +10,7 @@ export type UploadWorkerData = {
 // before execution, remote file doesn't exist
 export type UploadTask = {
     // identify the file
-    folderId: string,
+    id: string,
     diskType: DiskType,
     groupId?: string,
     type: FileType,
@@ -47,13 +47,13 @@ parentPort!.on("message", async (msg: UploadWorkerMessage) => {
     try {
         const { type } = msg;
         if (type === "task") {
-            const { folderId, diskType, groupId, type, path } = msg.task;
+            const { id, diskType, groupId, type, path } = msg.task;
 
             // if folder, list directory entries and return tasks
             if (type === "folder") {
                 // execute task
                 const name = path.split("/").pop()!;
-                const res = await api.mkdirByFolderIds(folderId, [name], diskType, groupId);
+                const res = await api.mkdirByFolderIds(id, [name], diskType, groupId);
 
                 // construct tasks
                 const files = fs.readdirSync(path);
@@ -62,7 +62,7 @@ parentPort!.on("message", async (msg: UploadWorkerMessage) => {
                     const p = path + "/" + f;
                     const stats = fs.statSync(p);
                     return {
-                        folderId: res[0].number,
+                        id: res[0].number,
                         diskType: diskType,
                         groupId: groupId,
                         type: stats.isDirectory() ? "folder" : "file",
@@ -83,7 +83,7 @@ parentPort!.on("message", async (msg: UploadWorkerMessage) => {
                 // if empty file, leave out
                 if (stats.size !== 0) {
                     console.log(`[INFO] ${path}: uploading`);
-                    await api.uploadByFolderId(folderId, path, diskType, groupId);
+                    await api.uploadByFolderId(id, path, diskType, groupId);
                 } else {
                     console.warn(`[WARN] ${path}: empty file will be ignored`);
                 }
