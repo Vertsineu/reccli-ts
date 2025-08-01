@@ -36,7 +36,7 @@ export type WorkerMessage = {
     // transfer failed - should mark transfer as failed
     type: "failed",
     error: string,
-    taskPath?: string
+    path?: string
 } | {
     // pause the worker
     type: "pause"
@@ -48,15 +48,15 @@ export type WorkerMessage = {
     type: "exit"
 }
 
-export interface WorkerConfig {
+export interface WorkerConfig<T = any> {
     workerCount: number;
     workerPath: string;
-    workerData: any;
+    workerData: T;
     abortSignal?: AbortSignal;
     pauseSignal?: PauseSignal;
 }
 
-export class MultiWorkerExecutor {
+export class MultiWorkerExecutor<T = any> {
     private workers: Worker[] = [];
     private ready: boolean[] = [];
     private queue: WorkerTask[] = [];
@@ -71,7 +71,7 @@ export class MultiWorkerExecutor {
     private pauseListener: () => void;
     private resumeListener: () => void;
 
-    constructor(private config: WorkerConfig) {
+    constructor(private config: WorkerConfig<T>) {
         // Initialize event handlers once in constructor
         this.abortHandler = () => this.terminateAllWorkers();
 
@@ -182,15 +182,16 @@ export class MultiWorkerExecutor {
             this.handleProgressMessage(msg);
         } else if (type === "failed") {
             this.handleFailedMessage(msg, reject);
+        } else {
+            console.warn(`[WARN] Unknown message type: ${type}`);
+            console.warn(`[WARN] Message content: ${JSON.stringify(msg)}`);
         }
     }
 
     private handleFinishMessage(
-        msg: WorkerMessage, 
+        msg: Extract<WorkerMessage, { type: "finish" }>, 
         resolve: () => void
     ): void {
-        if (msg.type !== "finish") return;
-
         // Update progress tracking
         const currentProgress = this.workerProgress.get(msg.index);
         if (currentProgress) {
@@ -222,9 +223,9 @@ export class MultiWorkerExecutor {
     }
 
     private handleProgressMessage(
-        msg: WorkerMessage
+        msg: Extract<WorkerMessage, { type: "progress" }>
     ): void {
-        if (msg.type !== "progress" || !this.onProgress || this.config.abortSignal?.aborted || this.config.pauseSignal?.paused) return;
+        if (!this.onProgress || this.config.abortSignal?.aborted || this.config.pauseSignal?.paused) return;
 
         // Update progress for this worker
         const existingProgress = this.workerProgress.get(msg.index);
@@ -246,13 +247,11 @@ export class MultiWorkerExecutor {
     }
 
     private handleFailedMessage(
-        msg: WorkerMessage,
+        msg: Extract<WorkerMessage, { type: "failed" }>,
         reject: (error: Error) => void
     ): void {
-        if (msg.type !== "failed") return;
-
         this.terminateAllWorkers();
-        reject(new Error(`Execution failed: ${msg.error}${msg.taskPath ? ` (Path: ${msg.taskPath})` : ''}`));
+        reject(new Error(`Execution failed: ${msg.error}${msg.path ? ` (Path: ${msg.path})` : ''}`));
     }
 
     private calculateTotalProgress(): { totalTransferred: number, totalRate: number, activeWorkers: number } {

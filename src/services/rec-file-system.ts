@@ -8,7 +8,8 @@ import { fileURLToPath } from "url";
 import { UploadTask, UploadWorkerMessage } from "./workers/upload-worker.js";
 import { PanDavClient } from "./pan-dav-api.js";
 import { PauseSignal } from "@utils/pause-signal.js";
-import { MultiWorkerExecutor, WorkerTask, ProgressCallback } from "../utils/multi-worker-executor.js";
+import { MultiWorkerExecutor, WorkerTask, ProgressCallback } from "@utils/multi-worker-executor.js";
+import { TransferWorkerData } from "@services/workers/transfer-worker.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -1010,12 +1011,12 @@ class RecFileSystem {
         }
 
         // Use MultiWorkerExecutor for both files and folders
-        const executor = new MultiWorkerExecutor({
+        const executor = new MultiWorkerExecutor<TransferWorkerData>({
             workerCount: file.type === "file" ? 1 : 2, // Use single worker for files, multiple for folders
             workerPath: dirname + "/workers/transfer-worker.js",
             workerData: { 
                 userAuth: this.api.getUserAuth(), 
-                recAuth: this.api.getRecAuth(), 
+                recAuth: this.api.getRecAuth()!, 
                 panDavAuth: client.getPanDavAuth() 
             },
             abortSignal,
