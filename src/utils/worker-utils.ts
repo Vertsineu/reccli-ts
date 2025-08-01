@@ -1,4 +1,4 @@
-import { Worker } from "worker_threads";
+import { Worker, parentPort } from "worker_threads";
 import { PauseSignal } from "@utils/pause-signal.js";
 import { DiskType, FileType } from "@services/rec-api.js";
 
@@ -299,5 +299,154 @@ export class MultiWorkerExecutor<T = any> {
         // Clear progress tracking and callback
         this.workerProgress.clear();
         this.onProgress = undefined;
+    }
+}
+
+// Abstract base class for all workers
+export abstract class WorkerBase {
+    protected pauseSignal?: PauseSignal;
+    protected abortController?: AbortController;
+    protected abortSignal?: AbortSignal;
+
+    constructor(options?: { enableSignals?: boolean }) {
+        if (options?.enableSignals) {
+            this.pauseSignal = new PauseSignal();
+            this.abortController = new AbortController();
+            this.abortSignal = this.abortController.signal;
+        }
+
+        // Set up message handler
+        parentPort!.on("message", async (msg: WorkerMessage) => {
+            try {
+                await this.handleMessage(msg);
+            } catch (e: any) {
+                this.handleFatalError(e, msg);
+            }
+        });
+    }
+
+    // Abstract methods that must be implemented by concrete workers
+    protected abstract processFolderTask(task: WorkerTask, msgIndex: number, retryCount: number, maxRetries: number): Promise<void>;
+    protected abstract processFileTask(task: WorkerTask, msgIndex: number, retryCount: number, maxRetries: number): Promise<void>;
+
+    // Message router with global pause handling
+    protected async handleMessage(msg: WorkerMessage): Promise<void> {
+        const { type } = msg;
+
+        if (type === "pause") {
+            this.handlePauseMessage();
+        } else if (type === "resume") {
+            this.handleResumeMessage();
+        } else if (type === "task") {
+            await this.handleTaskMessage(msg);
+        } else if (type === "exit") {
+            this.handleExitMessage(); // This will not return
+        } else {
+            console.warn(`[WARN] Unknown message type: ${type}`);
+            console.warn(`[WARN] Message content: ${JSON.stringify(msg)}`);
+        }
+    }
+
+    // Handle fatal errors
+    protected handleFatalError(error: any, msg?: WorkerMessage): void {
+        console.error(`[WORKER ERROR] Fatal error in worker:`, error);
+
+        // Trigger abort signal on fatal error if available
+        this.abortController?.abort();
+        
+        // Try to send failed message if possible
+        try {
+            parentPort!.postMessage({
+                type: "failed",
+                error: `Worker fatal error: ${error.message || error}`,
+                path: msg?.type === "task" ? msg.task?.path : undefined
+            });
+        } catch (sendError) {
+            console.error(`[WORKER ERROR] Failed to send error message:`, sendError);
+        }
+
+        // Exit with error code to indicate failure
+        process.exit(1);
+    }
+
+    // Handle pause command
+    protected handlePauseMessage(): void {
+        this.pauseSignal?.pause();
+    }
+
+    // Handle resume command
+    protected handleResumeMessage(): void {
+        this.pauseSignal?.resume();
+    }
+
+    // Handle exit command
+    protected handleExitMessage(): void {
+        // Trigger abort signal before exiting if available
+        this.abortController?.abort();
+        process.exit(0);
+    }
+
+    // Handle retry logic and exponential backoff
+    protected async handleRetry(error: any, task: WorkerTask, retryCount: number, maxRetries: number): Promise<boolean> {
+        console.error(`[ERROR] Failed to process ${task.type} ${task.path} (attempt ${retryCount}/${maxRetries}):`, error);
+
+        if (retryCount >= maxRetries) {
+            // After max retries, mark as failed
+            console.error(`[FAILED] Task failed after ${maxRetries} attempts for ${task.path}`);
+
+            // Trigger abort signal when task fails after max retries if available
+            this.abortController?.abort();
+            
+            // Send failed message to main thread
+            parentPort!.postMessage({
+                type: "failed",
+                error: `Task failed after ${maxRetries} attempts: ${error.message || error}`,
+                taskPath: task.path
+            });
+            return false; // Don't retry
+        } else {
+            // Wait before retry (exponential backoff)
+            const waitTime = Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
+            console.log(`[INFO] Waiting ${waitTime}ms before retry ${retryCount + 1}/${maxRetries} for ${task.path}`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            return true; // Continue retrying
+        }
+    }
+
+    // Handle task execution with retry logic
+    protected async handleTaskMessage(msg: Extract<WorkerMessage, { type: "task" }>): Promise<void> {
+        const { task } = msg;
+
+        // Apply retry strategy at task level for both folders and files
+        let retryCount = 0;
+        const maxRetries = 5;
+
+        while (retryCount < maxRetries) {
+            try {
+                // Global pause logic - wait if paused before processing task
+                while (this.pauseSignal?.paused) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                if (task.type === "folder") {
+                    await this.processFolderTask(task, msg.index, retryCount, maxRetries);
+                    break; // Success, exit retry loop
+                } else if (task.type === "file") {
+                    await this.processFileTask(task, msg.index, retryCount, maxRetries);
+                    break; // Success, exit retry loop
+                }
+            } catch (error: any) {
+                // Global pause logic - wait if paused before processing task
+                while (this.pauseSignal?.paused) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                retryCount++;
+                const shouldRetry = await this.handleRetry(error, task, retryCount, maxRetries);
+                if (!shouldRetry) {
+                    return; // Exit if max retries reached
+                }
+            }
+        }
     }
 }

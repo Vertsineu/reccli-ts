@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from "url";
 import { PanDavClient } from "./pan-dav-api.js";
 import { PauseSignal } from "@utils/pause-signal.js";
-import { MultiWorkerExecutor, WorkerTask, WorkerMessage, ProgressCallback } from "@utils/multi-worker-executor.js";
+import { MultiWorkerExecutor, WorkerTask, WorkerMessage, ProgressCallback } from "@utils/worker-utils.js";
 import { DownloadWorkerData } from "@services/workers/download-worker.js";
 import { TransferWorkerData } from "@services/workers/transfer-worker.js";
 import { UploadWorkerData } from "@services/workers/upload-worker.js";
@@ -701,7 +701,7 @@ class RecFileSystem {
             if (!fs.existsSync(src)) {
                 throw new Error(`${src} not found`);
             }
-            
+
             // if dest contains file with the same name, then upload failed
             const files = await this.lsc(path);
             if (!files.stat) {
