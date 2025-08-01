@@ -3,35 +3,9 @@ import axios from "axios";
 import { PauseSignal } from "@utils/pause-signal.js";
 
 /**
- * Get total file size using Range request
- */
-async function getBytesTotal(url: string, abortSignal?: AbortSignal): Promise<number> {
-    try {
-        // Use Range request to get total size from Content-Range header
-        const response = await axios.get(url, {
-            headers: {
-                'Range': 'bytes=0-0' // Request only the first byte
-            },
-            signal: abortSignal
-        });
-        
-        // Parse Content-Range header: "bytes 0-0/total_size"
-        const contentRange = response.headers['content-range'];
-        const match = contentRange.match(/bytes \d+-\d+\/(\d+)/);
-        return match ? parseInt(match[1], 10) : -1;
-    } catch (error) {
-        // Handle network errors gracefully
-        if (axios.isAxiosError(error)) {
-            throw new Error(`Failed to get file size: ${error.response?.status} ${error.response?.statusText || error.message}`);
-        }
-        throw error;
-    }
-}
-
-/**
  * Create a Range request for downloading from a specific byte position
  */
-async function requestRangedDownload(url: string, startByte: number = 0, abortSignal?: AbortSignal): Promise<Readable> {
+async function requestRangedDownload(url: string, startByte: number = 0, abortSignal?: AbortSignal) {
     try {
         const response = await axios<Readable>({
             method: 'GET',
@@ -43,7 +17,7 @@ async function requestRangedDownload(url: string, startByte: number = 0, abortSi
             }
         });
         
-        return response.data;
+        return response;
     } catch (error) {
         // Handle network errors gracefully
         if (axios.isAxiosError(error)) {
@@ -59,7 +33,7 @@ async function requestRangedDownload(url: string, startByte: number = 0, abortSi
 export class PausableDownloadStream extends Readable {
     private downloadStream: Readable | null = null;
     private bytesReceived = 0;
-    private bytesTotal = -1;
+    private bytesTotal = -1; // -1 means unknown size
     
     // Store bound functions as class properties for proper cleanup
     private handlePause: () => void;
@@ -98,43 +72,35 @@ export class PausableDownloadStream extends Readable {
             this.downloadStream = null;
         } else if (!paused && !this.downloadStream) {
             // Resume: start new stream with Range header
-            this.startStream();
+            this.startStream().catch(error => {
+                if (!this.abortSignal?.aborted) {
+                    this.emit('error', error);
+                }
+            });
         }
     };
-
-    // lazy load total bytes
-    private async getBytesTotal(): Promise<number> {
-        if (this.bytesTotal === -1) {
-            try {
-                return this.bytesTotal = await getBytesTotal(this.url, this.abortSignal);
-            } catch (error) {
-                // If we can't get file size, emit error instead of throwing
-                this.emit('error', error);
-                return -1;
-            }
-        }
-        return this.bytesTotal;
-    }
 
     private async startStream(): Promise<void> {
         if (this.downloadStream) {
             return; // Already started  
         }
 
+        // Check if we have already received all bytes
+        if (this.bytesTotal > 0 && this.bytesReceived >= this.bytesTotal) {
+            this.push(null);
+            return;
+        }
+
         try {
-            const totalBytes = await this.getBytesTotal();
-            if (totalBytes === -1) {
-                // getBytesTotal failed and already emitted an error
-                return;
+            const response = await requestRangedDownload(this.url, this.bytesReceived, this.abortSignal);
+            this.downloadStream = response.data;
+            
+            // Initialize bytesTotal from content-length if not already set
+            const contentLength = response.headers['content-length'] ? parseInt(response.headers['content-length'], 10) : undefined;
+            if (this.bytesTotal === -1 && contentLength) {
+                // contentLength is the remaining bytes, add bytesReceived to get total file size
+                this.bytesTotal = this.bytesReceived + contentLength;
             }
-
-            if (this.bytesReceived >= totalBytes) {
-                // If we have already received all bytes, push null to signal end
-                this.push(null);
-                return;
-            }
-
-            this.downloadStream = await requestRangedDownload(this.url, this.bytesReceived, this.abortSignal);
         } catch (error) {
             if (!this.abortSignal?.aborted) {
                 this.emit('error', error);
@@ -172,7 +138,11 @@ export class PausableDownloadStream extends Readable {
         if (!this.downloadStream) {
             // Start the download stream when first read is requested
             if (!this.pauseSignal?.paused && !this.abortSignal?.aborted) {
-                this.startStream();
+                this.startStream().catch(error => {
+                    if (!this.abortSignal?.aborted) {
+                        this.emit('error', error);
+                    }
+                });
             }
             return;
         }
