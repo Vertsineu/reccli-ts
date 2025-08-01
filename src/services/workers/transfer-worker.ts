@@ -1,4 +1,4 @@
-import RecAPI, { DiskType, FileType, RecAuth, UserAuth } from "@services/rec-api.js";
+import RecAPI, { RecAuth, UserAuth } from "@services/rec-api.js";
 import { parentPort, workerData } from "worker_threads";
 import { downloadToWebDav } from "@utils/downloader.js";
 import { createPanDavClient, PanDavAuth } from "@services/pan-dav-api.js";
@@ -128,19 +128,15 @@ async function processFolderTask(task: WorkerTask, msgIndex: number, retryCount:
 
 // Handle file task processing
 async function processFileTask(task: WorkerTask, msgIndex: number, retryCount: number, maxRetries: number): Promise<void> {
-    const { id, diskType, groupId, path } = task;
+    const { id, groupId, path } = task;
     
     // execute task
     const dict = await api.getDownloadUrlByIds([id], groupId);
     const url = dict[id];
-    console.log(`[INFO] ${path}: transferring (attempt ${retryCount + 1}/${maxRetries})`);
 
     transfer: do {
         do {
             const exists = await client.exists(path);
-
-            // log existence check
-            console.log(`[INFO] ${path}: exists: ${exists}`);
 
             // if not exist, then transfer
             if (!exists) break;
@@ -149,9 +145,6 @@ async function processFileTask(task: WorkerTask, msgIndex: number, retryCount: n
             const currentSize = "data" in stat ? stat.data.size : stat.size;
             const info = await api.getFileInfo({ id, type: "file" }, groupId);
             const originalSize = info.bytes;
-
-            // log two sizes
-            console.log(`[INFO] ${path}: original size = ${originalSize}, current size = ${currentSize}`);
 
             // if size matches, skip transfer
             if (originalSize === currentSize) {
@@ -167,7 +160,7 @@ async function processFileTask(task: WorkerTask, msgIndex: number, retryCount: n
             }
         } while (false);
 
-        console.log(`[INFO] ${path}: transferring file (attempt ${retryCount + 1}/${maxRetries})`);
+        console.log(`[INFO] ${path}: transferring (attempt ${retryCount + 1}/${maxRetries})`);
         // Use the worker's pauseSignal and abortSignal for file transfer
         await downloadToWebDav(url, path, client, (transferred, rate) => {
             parentPort!.postMessage({
@@ -178,7 +171,7 @@ async function processFileTask(task: WorkerTask, msgIndex: number, retryCount: n
                 rate: rate
             });
         }, abortSignal, pauseSignal);
-        console.log(`[INFO] ${path}: file transfer completed`);
+        console.log(`[INFO] ${path}: transfer completed`);
     } while (false);
 
     // return empty tasks

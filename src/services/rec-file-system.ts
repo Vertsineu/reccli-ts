@@ -1,15 +1,14 @@
 import RecAPI, { DiskType, FileType } from "@services/rec-api.js";
 import fs from "fs";
-import { downloadFile, downloadToWebDav } from "@utils/downloader.js";
-import { DownloadTask, DownloadWorkerMessage } from "./workers/download-worker.js";
 import { Worker } from "worker_threads";
 import path from 'path';
 import { fileURLToPath } from "url";
-import { UploadTask, UploadWorkerMessage } from "./workers/upload-worker.js";
 import { PanDavClient } from "./pan-dav-api.js";
 import { PauseSignal } from "@utils/pause-signal.js";
-import { MultiWorkerExecutor, WorkerTask, ProgressCallback } from "@utils/multi-worker-executor.js";
+import { MultiWorkerExecutor, WorkerTask, WorkerMessage, ProgressCallback } from "@utils/multi-worker-executor.js";
+import { DownloadWorkerData } from "@services/workers/download-worker.js";
 import { TransferWorkerData } from "@services/workers/transfer-worker.js";
+import { UploadWorkerData } from "@services/workers/upload-worker.js";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -702,14 +701,11 @@ class RecFileSystem {
             if (!fs.existsSync(src)) {
                 throw new Error(`${src} not found`);
             }
+            
             // if dest contains file with the same name, then upload failed
             const files = await this.lsc(path);
             if (!files.stat) {
                 throw new Error(`cannot list files in ${dest}`);
-            }
-            const name = src.split("/").pop();
-            if (files.data.some(f => f.name === name)) {
-                throw new Error(`file with the same name exists in ${dest}`);
             }
         } catch (e) {
             return {
@@ -718,84 +714,32 @@ class RecFileSystem {
             };
         }
 
-        try {
-            const stats = fs.statSync(src);
+        const isFolder = fs.statSync(src).isDirectory();
 
-            if (stats.isFile()) {
-                console.log(`[INFO] ${src}: uploading`);
-                await this.api.uploadByFolderId(folder.id, src, folder.diskType, folder.groupId);
-            } else if (stats.isDirectory()) {
-                // multithread upload using worker_thread
-                const count = 4;
-                // construct workers
-                const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/upload-worker.js", { workerData: { auth: this.api.getUserAuth() } }));
-
-                // construct ready flag array
-                const ready = new Array(count).fill(true);
-
-                // construct root task
-                const task: UploadTask = {
-                    id: folder.id,
-                    diskType: folder.diskType,
-                    groupId: folder.groupId,
-                    type: folder.type,
-                    path: src
-                };
-
-                // construct task queue
-                const queue: UploadTask[] = [];
-
-                // construct promise for all task finish
-                const finished = new Promise<void>((resolve, reject) => {
-                    // deal with message from worker
-                    workers.forEach(worker => {
-                        worker.on("message", (msg: UploadWorkerMessage) => {
-                            const { type } = msg;
-                            if (type === "finish") {
-                                // set ready flag
-                                ready[msg.index] = true;
-                                // add tasks to queue
-                                queue.push(...msg.tasks);
-
-                                // try to allocate tasks to all ready workers
-                                while (queue.length > 0) {
-                                    const index = ready.indexOf(true);
-                                    if (index === -1) return;
-                                    const task = queue.shift();
-                                    ready[index] = false;
-                                    workers[index].postMessage({ type: "task", index: index, task: task });
-                                }
-
-                                // task queue is empty, then check if it is all finished
-                                if (ready.some(r => !r)) return;
-
-                                // if all finished, then stop all workers 
-                                workers.forEach(w => {
-                                    w.postMessage({ type: "exit" })
-                                    w.terminate();
-                                });
-                                resolve();
-                            } else if (type === "error") {
-                                // if error, then stop all workers
-                                workers.forEach(w => {
-                                    w.postMessage({ type: "exit" })
-                                    w.terminate();
-                                });
-                                // and then throw error
-                                reject(msg.error);
-                            }
-                        });
-                    });
-                });
-
-                // start the first task
-                ready[0] = false;
-                workers[0].postMessage({ type: "task", index: 0, task: task });
-
-                // wait for all finished
-                await finished;
+        // Use MultiWorkerExecutor for both files and folders
+        const executor = new MultiWorkerExecutor<UploadWorkerData>({
+            workerCount: isFolder ? 4 : 1, // Use multiple workers for folders, single for files
+            workerPath: dirname + "/workers/upload-worker.js",
+            workerData: { 
+                userAuth: this.api.getUserAuth(),
+                recAuth: this.api.getRecAuth()!
             }
+            // Note: No abortSignal or pauseSignal support as requested
+        });
 
+        // Construct root task
+        const task: WorkerTask = {
+            id: folder.id,
+            diskType: folder.diskType,
+            groupId: folder.groupId,
+            type: isFolder ? "folder" : "file",
+            path: src
+        };
+
+        try {
+            // Execute the task using the executor
+            console.log(`[INFO] ${src}: uploading via MultiWorkerExecutor`);
+            await executor.execute(task);
         } catch (e) {
             return {
                 stat: false,
@@ -811,7 +755,7 @@ class RecFileSystem {
 
     // dest must be a folder
     // download src file to dest folder
-    public async download(src: string, dest: string): Promise<RetType<void>> {
+    public async download(src: string, dest: string, onProgress?: ProgressCallback, abortSignal?: AbortSignal, pauseSignal?: PauseSignal): Promise<RetType<void>> {
         const path = await this.calcPath(src);
         // if path is null or path is root, then download failed
         if (!path || path.length === 0) return {
@@ -843,16 +787,11 @@ class RecFileSystem {
             if (!fs.existsSync(dest)) {
                 throw new Error(`${dest} not found`);
             }
+
             const stats = fs.statSync(dest);
             // if dest is not a directory, then download failed
             if (!stats.isDirectory()) {
                 throw new Error(`${dest} is not a folder`);
-            }
-
-            // if dest contains file with the same name, then download failed
-            const files = fs.readdirSync(dest);
-            if (files.some(f => f === file.name)) {
-                throw new Error(`file with the same name exists in ${dest}`);
             }
 
             // if dest is a folder, then download with the name of src
@@ -864,84 +803,38 @@ class RecFileSystem {
             };
         }
 
-        if (file.type === "file") {
-            const dict = await this.api.getDownloadUrlByIds([file.id], file.groupId);
-            const url = dict[file.id];
-
-            console.log(`[INFO] ${dest}: downloading`);
-            // download file using url
-            await downloadFile(url, dest);
-        } else if (file.type === "folder") {
-            // multithread download using worker_thread
-            const count = 4;
-            // construct workers
-            const workers = new Array(count).fill(0).map(() => new Worker(dirname + "/workers/download-worker.js", { workerData: { auth: this.api.getUserAuth() } }));
-
-            // construct ready flag array
-            const ready = new Array(count).fill(true);
-
-            // construct root task
-            const task: DownloadTask = {
-                id: file.id,
-                diskType: file.diskType,
-                groupId: file.groupId,
-                type: file.type,
-                path: dest
-            }
-
-            // construct task queue
-            const queue: DownloadTask[] = [];
-
-            // construct promise for all task finish
-            const finished = new Promise<void>((resolve, reject) => {
-                // deal with message from worker
-                workers.forEach(worker => {
-                    worker.on("message", (msg: DownloadWorkerMessage) => {
-                        const { type } = msg;
-                        if (type === "finish") {
-                            // set ready flag
-                            ready[msg.index] = true;
-                            // add tasks to queue
-                            queue.push(...msg.tasks);
-
-                            // try to allocate tasks to all ready workers
-                            while (queue.length > 0) {
-                                const index = ready.indexOf(true);
-                                if (index === -1) return;
-                                const task = queue.shift();
-                                ready[index] = false;
-                                workers[index].postMessage({ type: "task", index: index, task: task });
-                            }
-
-                            // task queue is empty, then check if it is all finished
-                            if (ready.some(r => !r)) return;
-
-                            // if all finished, then stop all workers 
-                            workers.forEach(w => {
-                                w.postMessage({ type: "exit" })
-                                w.terminate();
-                            });
-                            resolve();
-                        } else if (type === "error") {
-                            // if error, then stop all workers
-                            workers.forEach(w => {
-                                w.postMessage({ type: "exit" })
-                                w.terminate();
-                            });
-                            // and then throw error
-                            reject(msg.error);
-                        }
-                    });
-                });
-            });
-
-            // start the first task
-            ready[0] = false;
-            workers[0].postMessage({ type: "task", index: 0, task: task });
-
-            // wait for all finished
-            await finished;
+        // Check if cancelled before starting download
+        if (abortSignal?.aborted) {
+            return {
+                stat: false,
+                msg: "Download was cancelled"
+            };
         }
+
+        // Use MultiWorkerExecutor for both files and folders
+        const executor = new MultiWorkerExecutor<DownloadWorkerData>({
+            workerCount: file.type === "file" ? 1 : 4, // Use single worker for files, multiple for folders
+            workerPath: dirname + "/workers/download-worker.js",
+            workerData: { 
+                userAuth: this.api.getUserAuth(),
+                recAuth: this.api.getRecAuth()!
+            },
+            abortSignal,
+            pauseSignal
+        });
+
+        // Construct root task
+        const task: WorkerTask = {
+            id: file.id,
+            diskType: file.diskType,
+            groupId: file.groupId,
+            type: file.type,
+            path: dest
+        };
+
+        // Execute the task using the executor
+        console.log(`[INFO] ${dest}: downloading via MultiWorkerExecutor`);
+        await executor.execute(task, onProgress);
 
         return {
             stat: true,
