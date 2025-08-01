@@ -1018,15 +1018,9 @@ class RecFileSystem {
 
             console.log(`[INFO] ${dest}: transferring`);
 
-            if (onProgress) {
-                // Use custom progress callback with cancellation and pause support
-                await downloadToWebDav(url, dest, client, (transferred, rate) => {
-                    onProgress(dest, transferred, rate);
-                }, abortSignal, pauseSignal);
-            } else {
-                // No progress tracking when onProgress is not provided, but still support cancellation and pause
-                await downloadToWebDav(url, dest, client, undefined, abortSignal, pauseSignal);
-            }
+            await downloadToWebDav(url, dest, client, (transferred, rate) => {
+                onProgress?.(dest, transferred, rate);
+            }, abortSignal, pauseSignal);
         } else if (file.type === "folder") {
             // multithread transfer using worker_thread
             const count = 2;
@@ -1052,39 +1046,31 @@ class RecFileSystem {
             let cancelled = false;
 
             // Set up cancellation handler
-            if (abortSignal) {
-                abortSignal.addEventListener('abort', () => {
-                    cancelled = true;
-                    // Stop all workers
-                    workers.forEach(w => {
-                        w.postMessage({ type: "exit" });
-                        w.terminate();
-                    });
+            abortSignal?.addEventListener('abort', () => {
+                cancelled = true;
+                // Stop all workers
+                workers.forEach(w => {
+                    w.postMessage({ type: "exit" });
+                    w.terminate();
                 });
-            }
+            });
 
             // Set up pause/resume event listeners for efficient event-driven control
-            const pauseListener = () => {
+            const pauseSignalListener = (paused: boolean) => {
                 // do nothing when cancelled
                 if (cancelled) return;
                 workers.forEach(w => {
-                    w.postMessage({ type: "pause" });
+                    w.postMessage({ type: paused ? 'pause' : 'resume' });
                 });
             };
 
-            const resumeListener = () => {
-                // do nothing when cancelled
-                if (cancelled) return;
-                workers.forEach(w => {
-                    w.postMessage({ type: "resume" });
-                });
-            };
+            // Define named listener functions for proper cleanup
+            const pauseListener = () => pauseSignalListener(true);
+            const resumeListener = () => pauseSignalListener(false);
 
             // Add event listeners if pauseSignal is provided
-            if (pauseSignal) {
-                pauseSignal.on('pause', pauseListener);
-                pauseSignal.on('resume', resumeListener);
-            }
+            pauseSignal?.on('pause', pauseListener);
+            pauseSignal?.on('resume', resumeListener);
 
             // Progress tracking for multiple workers
             const workerProgress = new Map<number, { path: string, transferred: number, rate: number, completedSize: number }>();
