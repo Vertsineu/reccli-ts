@@ -10,8 +10,8 @@ export interface SessionData {
     recAccount: string;
     recApi: RecAPI;
     recFileSystem: RecFileSystem;
-    panDavAuth: PanDavAuth;
-    panDavFileSystem: PanDavFileSystem;
+    panDavAuth?: PanDavAuth;
+    panDavFileSystem?: PanDavFileSystem;
     localFileSystem: LocalFileSystem;
     createdAt: Date;
     lastAccessedAt: Date;
@@ -20,8 +20,8 @@ export interface SessionData {
 export interface LoginRequest {
     recAccount: string;
     recPassword: string;
-    panDavAccount: string;
-    panDavPassword: string;
+    panDavAccount?: string;
+    panDavPassword?: string;
 }
 
 class SessionManager {
@@ -35,26 +35,39 @@ class SessionManager {
                 username: loginData.recAccount,
                 password: loginData.recPassword
             };
-            const panDavAuth: PanDavAuth = {
-                username: loginData.panDavAccount,
-                password: loginData.panDavPassword
-            };
 
-            // Initialize clients
+            // Initialize Rec client
             const recApi = new RecAPI(undefined, undefined, recAuth);
-            const panDavClient = createPanDavClient(panDavAuth);
+            
+            // Prepare login promises
+            const loginPromises: Promise<any>[] = [
+                // Rec API login is required
+                this.loginRec(recApi, loginData.recAccount, loginData.recPassword)
+            ];
 
-            // Perform parallel login attempts with fail-fast behavior
-            await Promise.all([
-                // Rec API login
-                this.loginRec(recApi, loginData.recAccount, loginData.recPassword),
-                // WebDAV login validation
-                this.loginPanDav(panDavClient)
-            ]);
+            let panDavAuth: PanDavAuth | undefined;
+            let panDavClient: any;
+            let panDavFileSystem: PanDavFileSystem | undefined;
 
-            // Both logins successful, create file systems
+            // Check if WebDAV credentials are provided
+            if (loginData.panDavAccount && loginData.panDavPassword) {
+                panDavAuth = {
+                    username: loginData.panDavAccount,
+                    password: loginData.panDavPassword
+                };
+                panDavClient = createPanDavClient(panDavAuth);
+                // Add WebDAV login validation to promises
+                loginPromises.push(this.loginPanDav(panDavClient));
+            }
+
+            // Perform login attempts
+            await Promise.all(loginPromises);
+
+            // Create file systems
             const recFileSystem = new RecFileSystem(recApi);
-            const panDavFileSystem = new PanDavFileSystem(panDavClient);
+            if (panDavClient) {
+                panDavFileSystem = new PanDavFileSystem(panDavClient);
+            }
             const localFileSystem = new LocalFileSystem();
 
             // Generate session ID

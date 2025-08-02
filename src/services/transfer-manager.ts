@@ -75,11 +75,16 @@ class TransferManager extends EventEmitter {
     public async startTransfer(
         taskId: string,
         recFileSystem: RecFileSystem,
-        panDavFileSystem: PanDavFileSystem
+        panDavFileSystem?: PanDavFileSystem
     ): Promise<void> {
         const task = this.tasks.get(taskId);
         if (!task) {
             throw new Error('Transfer task not found');
+        }
+
+        // Check if panDavFileSystem is required but not available
+        if (task.transferType === 'webdav' && !panDavFileSystem) {
+            throw new Error('WebDAV transfer requires PanDav file system');
         }
 
         if (task.status !== 'pending') {
@@ -153,7 +158,7 @@ class TransferManager extends EventEmitter {
     public resumeTransfer(
         taskId: string,
         recFileSystem: RecFileSystem,
-        panDavFileSystem: PanDavFileSystem
+        panDavFileSystem?: PanDavFileSystem
     ): void {
         const task = this.tasks.get(taskId);
         if (!task) {
@@ -205,7 +210,7 @@ class TransferManager extends EventEmitter {
     public restartTransfer(
         taskId: string,
         recFileSystem: RecFileSystem,
-        panDavFileSystem: PanDavFileSystem
+        panDavFileSystem?: PanDavFileSystem
     ): void {
         const task = this.tasks.get(taskId);
         if (!task) {
@@ -250,13 +255,18 @@ class TransferManager extends EventEmitter {
     private async executeTransfer(
         task: TransferTask,
         recFileSystem: RecFileSystem,
-        panDavFileSystem: PanDavFileSystem,
+        panDavFileSystem: PanDavFileSystem | undefined,
         abortSignal: AbortSignal,
         pauseSignal: PauseSignal
     ): Promise<void> {
         // Check if already cancelled
         if (abortSignal.aborted) {
             throw new Error('Transfer was cancelled');
+        }
+
+        // Check if panDavFileSystem is required but not available
+        if (task.transferType === 'webdav' && !panDavFileSystem) {
+            throw new Error('WebDAV transfer requires PanDav file system');
         }
 
         // Calculate total size first
@@ -277,6 +287,9 @@ class TransferManager extends EventEmitter {
 
         // Validate destination based on transfer type
         if (task.transferType === 'webdav') {
+            if (!panDavFileSystem) {
+                throw new Error('PanDav file system not available for WebDAV transfer');
+            }
             // Get PanDav client for WebDAV transfers
             const panDavClient = panDavFileSystem.getClient();
             if (!panDavClient) {
@@ -361,6 +374,9 @@ class TransferManager extends EventEmitter {
         let transferResult;
         
         if (task.transferType === 'webdav') {
+            if (!panDavFileSystem) {
+                throw new Error('PanDav file system not available for WebDAV transfer');
+            }
             // Get PanDav client for WebDAV transfers
             const panDavClient = panDavFileSystem.getClient();
             if (!panDavClient) {

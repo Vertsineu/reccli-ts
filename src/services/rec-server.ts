@@ -321,9 +321,11 @@ class RecServer {
 
     // PanDav File System endpoints
     private async panDavListFiles(req: AuthenticatedRequest, res: Response): Promise<void> {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
             const path = req.query.path as string || '';
-            const result = await req.session!.panDavFileSystem.ls(path);
+            const result = await req.session!.panDavFileSystem!.ls(path);
 
             if (result.stat && result.data) {
                 // Transform PanDav format to match Rec format
@@ -349,9 +351,11 @@ class RecServer {
     }
 
     private async panDavCopyFile(req: AuthenticatedRequest, res: Response): Promise<void> {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
             const { src, dest } = req.body;
-            const result = await req.session!.panDavFileSystem.cp(src, dest);
+            const result = await req.session!.panDavFileSystem!.cp(src, dest);
             this.sendResult(res, result);
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -359,9 +363,11 @@ class RecServer {
     }
 
     private async panDavMoveFile(req: AuthenticatedRequest, res: Response): Promise<void> {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
             const { src, dest } = req.body;
-            const result = await req.session!.panDavFileSystem.mv(src, dest);
+            const result = await req.session!.panDavFileSystem!.mv(src, dest);
             this.sendResult(res, result);
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -369,9 +375,11 @@ class RecServer {
     }
 
     private async panDavDeleteFile(req: AuthenticatedRequest, res: Response): Promise<void> {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
             const path = req.query.path as string;
-            const result = await req.session!.panDavFileSystem.rm(path);
+            const result = await req.session!.panDavFileSystem!.rm(path);
             this.sendResult(res, result);
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -379,9 +387,11 @@ class RecServer {
     }
 
     private async panDavCreateDirectory(req: AuthenticatedRequest, res: Response): Promise<void> {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
             const { path } = req.body;
-            const result = await req.session!.panDavFileSystem.mkdir(path);
+            const result = await req.session!.panDavFileSystem!.mkdir(path);
             this.sendResult(res, result);
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -389,9 +399,11 @@ class RecServer {
     }
 
     private async panDavGetStat(req: AuthenticatedRequest, res: Response): Promise<void> {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
             const path = req.query.path as string;
-            const result = await req.session!.panDavFileSystem.stat(path);
+            const result = await req.session!.panDavFileSystem!.stat(path);
             this.sendResult(res, result);
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -399,8 +411,10 @@ class RecServer {
     }
 
     private panDavGetPwd(req: AuthenticatedRequest, res: Response): void {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
-            const pwd = req.session!.panDavFileSystem.pwd();
+            const pwd = req.session!.panDavFileSystem!.pwd();
             res.json({ stat: true, data: pwd });
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -408,9 +422,11 @@ class RecServer {
     }
 
     private async panDavChangeDirectory(req: AuthenticatedRequest, res: Response): Promise<void> {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
             const { path } = req.body;
-            const result = await req.session!.panDavFileSystem.cd(path);
+            const result = await req.session!.panDavFileSystem!.cd(path);
             this.sendResult(res, result);
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -418,9 +434,11 @@ class RecServer {
     }
 
     private async panDavRenameFile(req: AuthenticatedRequest, res: Response): Promise<void> {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
             const { src, name } = req.body;
-            const result = await req.session!.panDavFileSystem.rename(src, name);
+            const result = await req.session!.panDavFileSystem!.rename(src, name);
             this.sendResult(res, result);
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -428,9 +446,11 @@ class RecServer {
     }
 
     private async panDavUnwrapFolder(req: AuthenticatedRequest, res: Response): Promise<void> {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
             const { src } = req.body;
-            const result = await req.session!.panDavFileSystem.unwrap(src);
+            const result = await req.session!.panDavFileSystem!.unwrap(src);
             this.sendResult(res, result);
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -438,9 +458,11 @@ class RecServer {
     }
 
     private async panDavGetPathSize(req: AuthenticatedRequest, res: Response): Promise<void> {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
             const path = req.query.path as string;
-            const result = await req.session!.panDavFileSystem.du(path);
+            const result = await req.session!.panDavFileSystem!.du(path);
             this.sendResult(res, result);
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -448,9 +470,11 @@ class RecServer {
     }
 
     private async panDavCheckExists(req: AuthenticatedRequest, res: Response): Promise<void> {
+        if (!this.checkPanDavAvailable(req, res)) return;
+        
         try {
             const path = req.query.path as string;
-            const result = await req.session!.panDavFileSystem.exists(path);
+            const result = await req.session!.panDavFileSystem!.exists(path);
             this.sendResult(res, result);
         } catch (error) {
             res.status(500).json({ error: String(error) });
@@ -551,7 +575,7 @@ class RecServer {
             this.transferManager.restartTransfer(
                 taskId,
                 req.session!.recFileSystem,
-                req.session!.panDavFileSystem
+                req.session!.panDavFileSystem || undefined
             );
 
             // Return immediately
@@ -630,6 +654,16 @@ class RecServer {
         } else {
             res.status(400).json(result);
         }
+    }
+
+    private checkPanDavAvailable(req: AuthenticatedRequest, res: Response): boolean {
+        if (!req.session!.panDavFileSystem) {
+            res.status(403).json({ 
+                error: 'PanDav functionality is not available. Please login with WebDAV credentials.' 
+            });
+            return false;
+        }
+        return true;
     }
 
     // Local File System endpoints

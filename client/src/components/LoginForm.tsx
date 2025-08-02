@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogIn, Eye, EyeOff, Loader2, XCircle } from 'lucide-react';
+import { LogIn, Eye, EyeOff, Loader2, XCircle, CheckSquare, Square } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { LoginRequest } from '@/types/api';
 
@@ -13,6 +13,7 @@ const LoginForm: React.FC = () => {
     });
     const [showRecPassword, setShowRecPassword] = useState(false);
     const [showPanDavPassword, setShowPanDavPassword] = useState(false);
+    const [enableWebDAV, setEnableWebDAV] = useState(false);
     const [error, setError] = useState<string>('');
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -20,7 +21,15 @@ const LoginForm: React.FC = () => {
         setError('');
 
         try {
-            await login(formData);
+            const loginData: LoginRequest = {
+                recAccount: formData.recAccount,
+                recPassword: formData.recPassword,
+                ...(enableWebDAV && {
+                    panDavAccount: formData.panDavAccount,
+                    panDavPassword: formData.panDavPassword,
+                })
+            };
+            await login(loginData);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
         }
@@ -99,17 +108,31 @@ const LoginForm: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div>
-                                <label htmlFor="panDavAccount" className="block text-sm font-medium text-gray-700 mb-2">
-                                    PanDAV Account
-                                </label>
+                            <div className="border-t border-gray-200 pt-4">
+                                <div className="flex items-center mb-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEnableWebDAV(!enableWebDAV)}
+                                        className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+                                    >
+                                        {enableWebDAV ? <CheckSquare size={20} className="text-primary-600" /> : <Square size={20} />}
+                                        Enable WebDAV Account (Optional)
+                                    </button>
+                                </div>
+                            </div>
+
+                            {enableWebDAV && (
+                                <>
+                                    <div>
+                                        <label htmlFor="panDavAccount" className="block text-sm font-medium text-gray-700 mb-2">
+                                            PanDAV Account
+                                        </label>
                                 <input
                                     type="text"
                                     id="panDavAccount"
                                     name="panDavAccount"
                                     value={formData.panDavAccount}
                                     onChange={handleChange}
-                                    required
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                                     placeholder="Enter your PanDAV username"
                                 />
@@ -126,7 +149,6 @@ const LoginForm: React.FC = () => {
                                         name="panDavPassword"
                                         value={formData.panDavPassword}
                                         onChange={handleChange}
-                                        required
                                         className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                                         placeholder="Enter your PanDAV password"
                                     />
@@ -139,6 +161,8 @@ const LoginForm: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
+                        </>
+                    )}
                         </div>
 
                         <button

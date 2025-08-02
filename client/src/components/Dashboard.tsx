@@ -8,7 +8,7 @@ import { FileItem, TransferTask } from '@/types/api';
 import { apiClient } from '@/services/api';
 
 const Dashboard: React.FC = () => {
-    const { user, logout } = useAuth();
+    const { user, logout, panDavAvailable } = useAuth();
     // 跨目录文件选择的数据结构 - 直接存储所有选中的文件
     const [selectedRecFilesTotal, setSelectedRecFilesTotal] = useState<FileItem[]>([]);
     const [selectedPanDavPath, setSelectedPanDavPath] = useState<string>('');
@@ -418,7 +418,7 @@ const Dashboard: React.FC = () => {
 
             {/* Main Content */}
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div className={`grid grid-cols-1 ${panDavAvailable ? 'lg:grid-cols-2' : ''} gap-8 mb-8`}>
                     {/* Rec File System */}
                     <FileExplorer
                         type="rec"
@@ -434,19 +434,21 @@ const Dashboard: React.FC = () => {
                         globalCalculatingSize={calculatingRecSize}
                     />
 
-                    {/* PanDav File System */}
-                    <FileExplorer
-                        type="pandav"
-                        title="PanDav WebDAV Storage"
-                        onFileSelect={handlePanDavFileSelect}
-                        onPathChange={handlePanDavPathChange}
-                        onClearAllSelection={handleClearPanDavSelection}
-                        allowSelection={true}
-                        clearSelection={clearPanDavSelection}
-                        refreshTrigger={refreshPanDav}
-                        className="h-96"
-                        globalSelectedCount={selectedPanDavFilesTotal.length}
-                    />
+                    {/* PanDav File System - Only show if available */}
+                    {panDavAvailable && (
+                        <FileExplorer
+                            type="pandav"
+                            title="PanDav WebDAV Storage"
+                            onFileSelect={handlePanDavFileSelect}
+                            onPathChange={handlePanDavPathChange}
+                            onClearAllSelection={handleClearPanDavSelection}
+                            allowSelection={true}
+                            clearSelection={clearPanDavSelection}
+                            refreshTrigger={refreshPanDav}
+                            className="h-96"
+                            globalSelectedCount={selectedPanDavFilesTotal.length}
+                        />
+                    )}
                 </div>
 
                 {/* Transfer Controls */}
@@ -484,7 +486,7 @@ const Dashboard: React.FC = () => {
                                 </p>
                             )}
 
-                            {selectedPanDavPath && (
+                            {panDavAvailable && selectedPanDavPath && (
                                 <p className="text-sm text-gray-600 mt-2">
                                     Destination: <span className="font-mono bg-gray-100 px-2 py-1 rounded">
                                         /{selectedPanDavPath}
@@ -492,8 +494,8 @@ const Dashboard: React.FC = () => {
                                 </p>
                             )}
 
-                            {/* PanDav Delete Control */}
-                            {selectedPanDavFilesTotal.length > 0 && (
+                            {/* PanDav Delete Control - Only show if WebDAV is available */}
+                            {panDavAvailable && selectedPanDavFilesTotal.length > 0 && (
                                 <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                                     <p className="text-sm text-red-800 mb-2">
                                         Selected {selectedPanDavFilesTotal.length} file(s) from PanDav for deletion
@@ -541,8 +543,8 @@ const Dashboard: React.FC = () => {
                                 <RefreshCw className="w-4 h-4" />
                             </button>
 
-                            {/* Delete PanDav Files Button */}
-                            {selectedPanDavFilesTotal.length > 0 && (
+                            {/* Delete PanDav Files Button - Only show if WebDAV is available */}
+                            {panDavAvailable && selectedPanDavFilesTotal.length > 0 && (
                                 <button
                                     onClick={handleDeletePanDavFiles}
                                     disabled={deletingPanDav}
@@ -580,23 +582,26 @@ const Dashboard: React.FC = () => {
                                 )}
                             </button>
 
-                            <button
-                                onClick={handleStartTransfer}
-                                disabled={selectedRecFilesTotal.length === 0 || !selectedPanDavPath || transferring}
-                                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {transferring ? (
-                                    <>
-                                        <RefreshCw className="w-4 h-4 animate-spin" />
-                                        Starting...
-                                    </>
-                                ) : (
-                                    <>
-                                        <ArrowRight className="w-4 h-4" />
-                                        Start Transfer
-                                    </>
-                                )}
-                            </button>
+                            {/* Start Transfer Button - Only show if WebDAV is available */}
+                            {panDavAvailable && (
+                                <button
+                                    onClick={handleStartTransfer}
+                                    disabled={selectedRecFilesTotal.length === 0 || !selectedPanDavPath || transferring}
+                                    className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {transferring ? (
+                                        <>
+                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                            Starting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ArrowRight className="w-4 h-4" />
+                                            Start Transfer
+                                        </>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
