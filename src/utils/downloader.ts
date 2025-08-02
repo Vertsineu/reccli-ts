@@ -17,13 +17,15 @@ export async function downloadFile(url: string, dest: string, onProgress?: Progr
     });
 
     // Handle abort signal
-    abortSignal?.addEventListener('abort', () => {
+    const abortHandler = () => {
         // Reset progress using the stream's method
         progressRateStream.resetProgress();
         downloadStream.destroy();
         progressRateStream.destroy();
         writer.destroy();
-    });
+    };
+    
+    abortSignal?.addEventListener('abort', abortHandler);
 
     try {
         // Use pipeline for better error handling and cleanup
@@ -38,6 +40,9 @@ export async function downloadFile(url: string, dest: string, onProgress?: Progr
             console.warn(`[WARN] Failed to clean up partial file ${dest}:`, cleanupError);
         }
         throw error;
+    } finally {
+        // Always remove the abort listener to prevent memory leaks
+        abortSignal?.removeEventListener('abort', abortHandler);
     }
 }
 
@@ -52,14 +57,21 @@ export async function downloadToWebDav(url: string, dest: string, client: PanDav
     const uploadStream = downloadStream.pipe(progressRateStream);
 
     // when failed
-    abortSignal?.addEventListener('abort', () => {
+    const abortHandler = () => {
         // Reset progress using the stream's method
         progressRateStream.resetProgress();
         downloadStream.destroy();
         progressRateStream.destroy();
         uploadStream.destroy();
-    });
+    };
+    
+    abortSignal?.addEventListener('abort', abortHandler);
 
-    // Create a promise-based approach for partial file updates
-    return client.putFileContents(dest, uploadStream);
+    try {
+        // Create a promise-based approach for partial file updates
+        return await client.putFileContents(dest, uploadStream);
+    } finally {
+        // Always remove the abort listener to prevent memory leaks
+        abortSignal?.removeEventListener('abort', abortHandler);
+    }
 }

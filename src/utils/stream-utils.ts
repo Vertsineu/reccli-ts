@@ -38,6 +38,7 @@ export class PausableDownloadStream extends Readable {
     // Store bound functions as class properties for proper cleanup
     private handlePause: () => void;
     private handleResume: () => void;
+    private handleAbort: () => void;
 
     // url must support range requests
     constructor(
@@ -49,6 +50,11 @@ export class PausableDownloadStream extends Readable {
         // Bind methods and store as properties
         this.handlePause = () => this.handlePauseSignal(true);
         this.handleResume = () => this.handlePauseSignal(false);
+        this.handleAbort = () => {
+            this.downloadStream?.destroy();
+            this.downloadStream = null;
+            this.destroy();
+        };
         this.setupEventListeners();
     }
 
@@ -58,11 +64,7 @@ export class PausableDownloadStream extends Readable {
         this.pauseSignal?.on('resume', this.handleResume);
 
         // handle abort signal
-        this.abortSignal?.addEventListener('abort', () => {
-            this.downloadStream?.destroy();
-            this.downloadStream = null;
-            this.destroy();
-        });
+        this.abortSignal?.addEventListener('abort', this.handleAbort);
     }
 
     private handlePauseSignal(paused: boolean): void {
@@ -165,6 +167,7 @@ export class PausableDownloadStream extends Readable {
         // Clean up event listeners
         this.pauseSignal?.off('pause', this.handlePause);
         this.pauseSignal?.off('resume', this.handleResume);
+        this.abortSignal?.removeEventListener('abort', this.handleAbort);
 
         callback(error);
     }
