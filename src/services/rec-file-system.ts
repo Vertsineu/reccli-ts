@@ -905,7 +905,7 @@ class RecFileSystem {
 
         // Use MultiWorkerExecutor for both files and folders
         const executor = new MultiWorkerExecutor<TransferWorkerData>({
-            workerCount: file.type === "file" ? 1 : 2, // Use single worker for files, multiple for folders
+            workerCount: file.type === "file" ? 1 : 4, // Use single worker for files, multiple for folders
             workerPath: dirname + "/workers/transfer-worker.js",
             workerData: { 
                 userAuth: this.api.getUserAuth(), 
