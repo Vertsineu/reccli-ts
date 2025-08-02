@@ -13,7 +13,7 @@ const LoginForm: React.FC = () => {
     });
     const [showRecPassword, setShowRecPassword] = useState(false);
     const [showPanDavPassword, setShowPanDavPassword] = useState(false);
-    const [enableWebDAV, setEnableWebDAV] = useState(false);
+    const [enableWebDAV, setEnableWebDAV] = useState(true);
     const [error, setError] = useState<string>('');
 
     const handleSubmit = async (e: React.FormEvent) => {
