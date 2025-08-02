@@ -12,6 +12,27 @@ import {
 import { FileItem } from '@/types/api';
 import { apiClient } from '@/services/api';
 
+// Sort files by type (directories first), then by size (largest first), then by name (alphabetical)
+const sortFilesBySize = (files: FileItem[]): FileItem[] => {
+    return [...files].sort((a, b) => {
+        // Directories first
+        if (a.type === 'directory' && b.type === 'file') return -1;
+        if (a.type === 'file' && b.type === 'directory') return 1;
+        
+        // For same type, sort by size (largest first)
+        if (a.type === b.type) {
+            const sizeDiff = b.size - a.size;
+            // If sizes are equal, sort by name alphabetically
+            if (sizeDiff === 0) {
+                return a.name.localeCompare(b.name);
+            }
+            return sizeDiff;
+        }
+        
+        return 0;
+    });
+};
+
 interface FileExplorerProps {
     type: 'rec' | 'pandav';
     title: string;
@@ -44,13 +65,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     globalSelectedSize,
     globalCalculatingSize,
 }) => {
+    // State management
     const [files, setFiles] = useState<FileItem[]>([]);
     const [currentPath, setCurrentPath] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string>('');
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
     const [selectedItemsSize, setSelectedItemsSize] = useState<number>(0);
-    const [calculatingSize, setCalculatingSize] = useState(false); const loadFiles = async (path: string = '') => {
+    const [calculatingSize, setCalculatingSize] = useState(false);
+
+    // File loading and management
+    const loadFiles = async (path: string = '') => {
         setLoading(true);
         setError('');
         try {
@@ -60,7 +85,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
             } else {
                 fileList = await apiClient.panDavListFiles(path);
             }
-            setFiles(fileList);
+            // Apply sorting and set files
+            setFiles(sortFilesBySize(fileList));
             setCurrentPath(path);
             onPathChange?.(path);
         } catch (err: any) {
@@ -71,18 +97,17 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         }
     };
 
+    // Effects
     useEffect(() => {
         loadFiles();
     }, [type]);
 
-    // 当刷新触发器变化时重新加载文件
     useEffect(() => {
         if (refreshTrigger) {
             loadFiles(currentPath);
         }
     }, [refreshTrigger, currentPath]);
 
-    // Clear selection when clearSelection prop changes
     useEffect(() => {
         if (clearSelection) {
             setSelectedItems(new Set());
@@ -91,7 +116,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         }
     }, [clearSelection, currentPath, onFileSelect]);
 
-    // Check if item can be selected based on current path and file type
+    // Selection logic
     const canItemBeSelected = (file: FileItem): boolean => {
         if (type === 'rec') {
             // Root level folders cannot be selected
@@ -137,10 +162,9 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         }
     };
 
-    // Track the latest size calculation request
+    // Size calculation logic
     const latestRequestIdRef = useRef<number>(0);
 
-    // Calculate the actual disk usage of selected items using du
     const calculateSelectedItemsSize = async (selectedFileObjects: FileItem[]) => {
         if (type !== 'rec' || selectedFileObjects.length === 0) {
             setSelectedItemsSize(0);
@@ -265,7 +289,10 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         if (canItemBeSelected(file)) {
             handleItemSelection(file);
         }
-    }; const navigateUp = () => {
+    };
+
+    // Navigation functions
+    const navigateUp = () => {
         const pathParts = currentPath.split('/').filter(Boolean);
         if (pathParts.length > 0) {
             pathParts.pop();
@@ -278,6 +305,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
         loadFiles('');
     };
 
+    // Utility functions
     const formatFileSize = (bytes: number): string => {
         if (bytes === 0) return '0 B';
         const k = 1024;
