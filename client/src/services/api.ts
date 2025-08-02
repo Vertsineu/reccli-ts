@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import {
     FileItem,
+    LocalFile,
     TransferTask,
     LoginRequest,
     LoginResponse,
@@ -196,21 +197,56 @@ class ApiClient {
     }
 
     // Local File System
-    async localListDirectory(path?: string): Promise<FileItem[]> {
-        const response = await this.api.get<ApiResponse<{ path: string; name: string; files: FileItem[] }>>('/local/list', {
-            params: path ? { path } : {}
-        });
-        return response.data.data.files;
+    async localListDirectory(path?: string): Promise<LocalFile[]> {
+        try {
+            const response = await this.api.get<ApiResponse<LocalFile[]>>('/local/list', {
+                params: path ? { path } : {}
+            });
+            
+            if (!response.data.stat) {
+                throw new Error(response.data.error || 'Failed to list directory');
+            }
+            
+            return response.data.data || [];
+        } catch (error: any) {
+            if (error.response?.data) {
+                const errorData = error.response.data;
+                throw new Error(errorData.error || 'Failed to list directory');
+            }
+            throw error;
+        }
     }
 
     async localChangeDirectory(path: string): Promise<{ currentPath: string }> {
-        const response = await this.api.post<ApiResponse<{ path: string }>>('/local/cd', { path });
-        return { currentPath: response.data.data.path };
+        try {
+            const response = await this.api.post<ApiResponse<string>>('/local/cd', { path });
+            if (!response.data.stat) {
+                throw new Error(response.data.error || 'Failed to change directory');
+            }
+            return { currentPath: response.data.data! };
+        } catch (error: any) {
+            if (error.response?.data) {
+                const errorData = error.response.data;
+                throw new Error(errorData.error || 'Failed to change directory');
+            }
+            throw error;
+        }
     }
 
     async localGetCurrentPath(): Promise<{ currentPath: string }> {
-        const response = await this.api.get<ApiResponse<{ path: string }>>('/local/pwd');
-        return { currentPath: response.data.data.path };
+        try {
+            const response = await this.api.get<ApiResponse<string>>('/local/pwd');
+            if (!response.data.stat) {
+                throw new Error(response.data.error || 'Failed to get current path');
+            }
+            return { currentPath: response.data.data! };
+        } catch (error: any) {
+            if (error.response?.data) {
+                const errorData = error.response.data;
+                throw new Error(errorData.error || 'Failed to get current path');
+            }
+            throw error;
+        }
     }
 
     async localStat(path: string): Promise<{ exists: boolean; isDirectory: boolean; isWritable: boolean }> {

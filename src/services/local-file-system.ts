@@ -1,158 +1,295 @@
 import fs from 'fs/promises';
+import { Stats } from 'fs';
 import path from 'path';
 import os from 'os';
+import * as drivelist from 'drivelist';
+
+export type RetType<T> =
+    { stat: true, data: T } |
+    { stat: false, msg: string }
 
 export interface LocalFile {
     name: string;
     type: 'file' | 'directory';
     size: number;
     modifiedAt: string;
-    path: string;
 }
 
-export interface LocalDirectory {
-    path: string;
-    name: string;
-    files: LocalFile[];
+// convert fs.Stats to LocalFile
+function convertStat(name: string, stat: Stats): LocalFile {
+    return {
+        name,
+        type: stat.isDirectory() ? 'directory' : 'file',
+        size: stat.size,
+        modifiedAt: stat.mtime.toISOString()
+    };
 }
 
 export class LocalFileSystem {
-    private currentPath: string;
+    private cwd: string;
+    private readonly isWindows: boolean;
 
     constructor() {
-        // 默认从用户主目录开始
-        this.currentPath = os.homedir();
+        this.isWindows = os.platform() === 'win32';
+        this.cwd = this.isWindows ? '\\' : os.homedir();
     }
 
     /**
-     * 获取当前目录
+     * Get all available drives (using drivelist)
      */
-    public pwd(): string {
-        return this.currentPath;
+    private async getSystemDrives(): Promise<Array<{ name: string; label: string; mountpoint: string; }>> {
+        // Early return for Unix-like systems
+        if (!this.isWindows) {
+            return [{ name: '/', label: 'Root filesystem', mountpoint: '/' }];
+        }
+
+        // Windows: get drive list using drivelist
+        try {
+            const drives = await drivelist.list();
+            const mountpoints: Array<{ name: string; label: string; mountpoint: string; }> = [];
+            
+            for (const drive of drives) {
+                if (drive.mountpoints && drive.mountpoints.length > 0) {
+                    for (const mp of drive.mountpoints) {
+                        // mp.path is directly in format like "C:\", "D:\", etc.
+                        // Just need to remove the trailing backslash to get drive letter
+                        const driveLetter = mp.path.replace(/\\$/, ''); // Remove trailing \
+                        mountpoints.push({
+                            name: driveLetter,
+                            label: driveLetter,  // Only show drive letter like C:, D:, E:
+                            mountpoint: driveLetter  // Use drive letter format directly as mountpoint
+                        });
+                    }
+                }
+            }
+            
+            // Sort by drive letter
+            mountpoints.sort((a, b) => a.name.localeCompare(b.name));
+            return mountpoints;
+        } catch (error) {
+            console.warn('Failed to get drive list:', error);
+            // Fallback: return C: drive
+            return [{ name: 'C:', label: 'C:', mountpoint: 'C:' }];
+        }
     }
 
     /**
-     * 列出指定目录的文件和文件夹
+     * Resolve target path based on current path and target
      */
-    public async ls(targetPath?: string): Promise<LocalDirectory> {
-        let dirPath: string;
-        
-        if (!targetPath) {
-            dirPath = this.currentPath;
+    // normalize path to absolute path based on current working directory
+    private normalizePath(targetPath: string): string {
+        // Handle empty path - return current working directory
+        if (!targetPath || targetPath.trim() === '') {
+            return this.cwd;
+        }
+
+        // Handle absolute paths
+        if (this.isWindows) {
+            if (targetPath.match(/^[A-Z]:/i) || targetPath === '\\') {
+                return targetPath;
+            }
         } else {
-            // 处理路径解析，与 changeDirectory 保持一致
-            if (targetPath === '..') {
-                dirPath = path.dirname(this.currentPath);
-            } else if (path.isAbsolute(targetPath)) {
-                dirPath = path.resolve(targetPath);
-            } else {
-                dirPath = path.resolve(this.currentPath, targetPath);
+            if (targetPath.startsWith('/')) {
+                return targetPath;
             }
         }
+
+        // Handle relative paths
+        if (targetPath === '..') {
+            if (this.isWindows) {
+                if (this.cwd === '\\') {
+                    return '\\'; // Stay at root
+                } else if (this.cwd.match(/^[A-Z]:$/i)) {
+                    return '\\'; // Back to drive selection from drive root
+                } else if (this.cwd.match(/^[A-Z]:\\$/i)) {
+                    return '\\'; // Back to drive selection from drive root with backslash
+                } else {
+                    const parentPath = path.dirname(this.cwd);
+                    // If parent is drive root (like "C:"), go back to drive selection
+                    if (parentPath.match(/^[A-Z]:$/i)) {
+                        return '\\';
+                    }
+                    return parentPath;
+                }
+            } else {
+                if (this.cwd === '/') {
+                    return '/';
+                } else {
+                    const parentPath = path.dirname(this.cwd);
+                    return parentPath === '.' ? '/' : parentPath;
+                }
+            }
+        }
+
+        // Handle other relative paths
+        if (this.isWindows) {
+            if (this.cwd === '\\') {
+                return targetPath; // From drive root, target becomes absolute
+            } else if (this.cwd.match(/^[A-Z]:$/i)) {
+                return this.cwd + '\\' + targetPath;
+            } else {
+                return path.join(this.cwd, targetPath);
+            }
+        } else {
+            return this.cwd === '/' ? '/' + targetPath : path.posix.join(this.cwd, targetPath);
+        }
+    }
+
+    // convert virtual path to real system path
+    private toRealPath(virtualPath: string): string {
+        if (!this.isWindows) {
+            return virtualPath;
+        }
+
+        // Windows path conversion
+        if (virtualPath.match(/^[A-Z]:$/i)) {
+            return virtualPath.toUpperCase() + '\\';
+        }
         
-        try {
-            // 验证路径是否存在且为目录
-            const stat = await fs.stat(dirPath);
-            if (!stat.isDirectory()) {
-                throw new Error(`Path ${dirPath} is not a directory`);
-            }
+        if (virtualPath.match(/^[A-Z]:/i)) {
+            return virtualPath.replace(/\//g, '\\');
+        }
 
-            const entries = await fs.readdir(dirPath);
-            const files: LocalFile[] = [];
+        return virtualPath;
+    }
 
-            for (const entry of entries) {
-                try {
-                    const entryPath = path.join(dirPath, entry);
-                    const entryStat = await fs.stat(entryPath);
-                    
-                    files.push({
-                        name: entry,
-                        type: entryStat.isDirectory() ? 'directory' : 'file',
-                        size: entryStat.size,
-                        modifiedAt: entryStat.mtime.toISOString(),
-                        path: entryPath
-                    });
-                } catch (error) {
-                    // 跳过无法访问的文件
-                    console.warn(`Cannot access ${entry}:`, error);
-                }
-            }
+    // get current working directory
+    public pwd(): RetType<string> {
+        return {
+            stat: true,
+            data: this.cwd
+        };
+    }
 
-            // 排序：目录优先，然后按名称排序
-            files.sort((a, b) => {
-                if (a.type !== b.type) {
-                    return a.type === 'directory' ? -1 : 1;
-                }
-                return a.name.localeCompare(b.name);
-            });
+    // list directory contents
+    public async ls(targetPath: string = ""): Promise<RetType<LocalFile[]>> {
+        const virtualPath = this.normalizePath(targetPath);
+
+        // Special handling: Windows drive listing
+        if (this.isWindows && virtualPath === '\\') {
+            const drives = await this.getSystemDrives();
+            const files: LocalFile[] = drives.map(drive => ({
+                name: drive.label,
+                type: 'directory' as const,
+                size: 0,
+                modifiedAt: new Date().toISOString()
+            }));
 
             return {
-                path: dirPath,
-                name: path.basename(dirPath) || dirPath,
-                files
+                stat: true,
+                data: files
             };
-        } catch (error) {
-            throw new Error(`Failed to list directory ${dirPath}: ${error instanceof Error ? error.message : String(error)}`);
         }
-    }
 
-    /**
-     * 更改当前目录
-     */
-    public async cd(targetPath: string): Promise<string> {
+        // Regular directory listing
+        const realPath = this.toRealPath(virtualPath);
+        
         try {
-            let newPath: string;
-            
-            // 处理特殊路径
-            if (targetPath === '..') {
-                // 返回上级目录
-                newPath = path.dirname(this.currentPath);
-            } else if (path.isAbsolute(targetPath)) {
-                // 绝对路径直接使用
-                newPath = path.resolve(targetPath);
-            } else {
-                // 相对路径，与当前目录组合
-                newPath = path.resolve(this.currentPath, targetPath);
-            }
-            
-            const stat = await fs.stat(newPath);
+            const stat = await fs.stat(realPath);
             if (!stat.isDirectory()) {
-                throw new Error(`Path ${newPath} is not a directory`);
+                return {
+                    stat: false,
+                    msg: `${virtualPath} is not a directory`
+                };
             }
 
-            this.currentPath = newPath;
-            return this.currentPath;
+            const entries = await fs.readdir(realPath);
+            
+            // Convert entries to LocalFile objects, filtering out inaccessible files
+            const files = (await Promise.all(
+                entries.map(async (entry) => {
+                    try {
+                        const entryRealPath = path.join(realPath, entry);
+                        const entryStat = await fs.stat(entryRealPath);
+                        return convertStat(entry, entryStat);
+                    } catch (error) {
+                        console.warn(`Cannot access ${entry}:`, error);
+                        return null;
+                    }
+                })
+            )).filter((file): file is LocalFile => file !== null);
+
+            return {
+                stat: true,
+                data: files
+            };
+
         } catch (error) {
-            throw new Error(`Failed to change directory to ${targetPath}: ${error instanceof Error ? error.message : String(error)}`);
+            return {
+                stat: false,
+                msg: `${virtualPath} not found`
+            };
         }
     }
 
-    /**
-     * 获取路径信息
-     */
-    public async stat(targetPath: string): Promise<{ exists: boolean, isDirectory: boolean, isWritable: boolean }> {
+    // change working directory
+    public async cd(targetPath: string): Promise<RetType<void>> {
+        const virtualPath = this.normalizePath(targetPath);
+        const realPath = this.toRealPath(virtualPath);
+
         try {
-            const stat = await fs.stat(targetPath);
+            const stat = await fs.stat(realPath);
+            if (!stat.isDirectory()) {
+                return {
+                    stat: false,
+                    msg: `${virtualPath} is not a directory`
+                };
+            }
+
+            this.cwd = virtualPath;
+            return {
+                stat: true,
+                data: undefined
+            };
+
+        } catch (error) {
+            return {
+                stat: false,
+                msg: `${virtualPath} not found`
+            };
+        }
+    }
+
+    // get path information
+    public async stat(targetPath: string): Promise<RetType<{ isDirectory: boolean, isWritable: boolean }>> {
+        const virtualPath = this.normalizePath(targetPath);
+
+        // Special handling: Windows root directory and drive root directories
+        if (this.isWindows && (virtualPath === '\\' || virtualPath.match(/^[A-Z]:$/i))) {
+            return {
+                stat: true,
+                data: {
+                    isDirectory: true,
+                    isWritable: false
+                }
+            };
+        }
+
+        const realPath = this.toRealPath(virtualPath);
+        
+        try {
+            const stat = await fs.stat(realPath);
             
-            // 检查路径是否可写
+            // Check if path is writable
             let isWritable = false;
             try {
-                await fs.access(targetPath, fs.constants.W_OK);
+                await fs.access(realPath, fs.constants.W_OK);
                 isWritable = true;
             } catch {
                 isWritable = false;
             }
             
             return {
-                exists: true,
-                isDirectory: stat.isDirectory(),
-                isWritable
+                stat: true,
+                data: {
+                    isDirectory: stat.isDirectory(),
+                    isWritable
+                }
             };
         } catch {
             return {
-                exists: false,
-                isDirectory: false,
-                isWritable: false
+                stat: false,
+                msg: `${virtualPath} not found`
             };
         }
     }

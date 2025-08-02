@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '@/services/api';
-import { FileItem } from '@/types/api';
+import { LocalFile } from '@/types/api';
 
 interface LocalDirectoryPickerProps {
     isOpen: boolean;
@@ -14,7 +14,7 @@ const LocalDirectoryPicker: React.FC<LocalDirectoryPickerProps> = ({
     onSelect
 }) => {
     const [currentPath, setCurrentPath] = useState<string>('');
-    const [directories, setDirectories] = useState<FileItem[]>([]);
+    const [directories, setDirectories] = useState<LocalFile[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -24,19 +24,25 @@ const LocalDirectoryPicker: React.FC<LocalDirectoryPickerProps> = ({
         }
     }, [isOpen]);
 
+    const handleError = (err: any, defaultMessage: string) => {
+        const errorMessage = err.response?.data?.error || err.response?.data?.msg || err.message || defaultMessage;
+        setError(errorMessage);
+    };
+
+    const updateCurrentPath = async () => {
+        const response = await apiClient.localGetCurrentPath();
+        setCurrentPath(response.currentPath || '');
+    };
+
     const loadInitialData = async () => {
         setLoading(true);
         setError(null);
         
         try {
-            // Get current path
-            const currentPathResponse = await apiClient.localGetCurrentPath();
-            setCurrentPath(currentPathResponse.currentPath);
-            
-            // Load current directory contents
+            await updateCurrentPath();
             await loadDirectory();
         } catch (err: any) {
-            setError(err.response?.data?.error || err.message || 'Failed to load directories');
+            handleError(err, 'Failed to load directories');
         } finally {
             setLoading(false);
         }
@@ -47,23 +53,24 @@ const LocalDirectoryPicker: React.FC<LocalDirectoryPickerProps> = ({
         setError(null);
         
         try {
-            const files = await apiClient.localListDirectory(path);
-            // Filter only directories
-            const dirs = files.filter(file => file.type === 'directory');
-            setDirectories(dirs);
-            
+            // Change directory if path is provided
             if (path) {
-                const response = await apiClient.localChangeDirectory(path);
-                setCurrentPath(response.currentPath);
+                await apiClient.localChangeDirectory(path);
+                await updateCurrentPath();
             }
+
+            // Load directory contents
+            const files = await apiClient.localListDirectory();
+            const directories = files.filter(file => file?.type === 'directory');
+            setDirectories(directories);
         } catch (err: any) {
-            setError(err.response?.data?.error || err.message || 'Failed to load directory');
+            handleError(err, 'Failed to load directory');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleDirectoryClick = async (directory: FileItem) => {
+    const handleDirectoryClick = async (directory: LocalFile) => {
         // Use the file name for relative path navigation
         await loadDirectory(directory.name);
     };
@@ -101,7 +108,7 @@ const LocalDirectoryPicker: React.FC<LocalDirectoryPickerProps> = ({
                 <div className="mb-4">
                     <div className="text-sm text-gray-600 mb-2">Current Path:</div>
                     <div className="bg-gray-100 px-3 py-2 rounded text-sm font-mono break-all">
-                        {currentPath}
+                        {currentPath || 'Loading...'}
                     </div>
                 </div>
 
@@ -110,7 +117,7 @@ const LocalDirectoryPicker: React.FC<LocalDirectoryPickerProps> = ({
                         <div className="text-center py-4 text-gray-500 text-sm">Loading...</div>
                     ) : (
                         <>
-                            {currentPath !== '/' && (
+                            {currentPath && currentPath !== '/' && currentPath !== '\\' && (
                                 <div
                                     onClick={handleGoUp}
                                     className="flex items-center py-1.5 px-2 hover:bg-gray-100 cursor-pointer rounded text-sm"

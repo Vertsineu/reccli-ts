@@ -636,17 +636,10 @@ class RecServer {
     private async localListDirectory(req: AuthenticatedRequest, res: Response): Promise<void> {
         try {
             const path = req.query.path as string;
-            const directory = await req.session!.localFileSystem.ls(path);
-            res.json({ 
-                stat: true, 
-                data: directory,
-                message: 'Directory listed successfully' 
-            });
+            const result = await req.session!.localFileSystem.ls(path);
+            this.sendResult(res, result);
         } catch (error) {
-            res.status(400).json({ 
-                stat: false, 
-                error: `Failed to list directory: ${error instanceof Error ? error.message : String(error)}` 
-            });
+            res.status(500).json({ error: String(error) });
         }
     }
 
@@ -658,33 +651,19 @@ class RecServer {
                 return;
             }
 
-            const newPath = await req.session!.localFileSystem.cd(path);
-            res.json({ 
-                stat: true, 
-                data: { path: newPath },
-                message: 'Directory changed successfully' 
-            });
+            const result = await req.session!.localFileSystem.cd(path);
+            this.sendResult(res, result);
         } catch (error) {
-            res.status(400).json({ 
-                stat: false, 
-                error: `Failed to change directory: ${error instanceof Error ? error.message : String(error)}` 
-            });
+            res.status(500).json({ error: String(error) });
         }
     }
 
     private localGetCurrentPath(req: AuthenticatedRequest, res: Response): void {
         try {
-            const currentPath = req.session!.localFileSystem.pwd();
-            res.json({ 
-                stat: true, 
-                data: { path: currentPath },
-                message: 'Current path retrieved successfully' 
-            });
+            const result = req.session!.localFileSystem.pwd();
+            this.sendResult(res, result);
         } catch (error) {
-            res.status(500).json({ 
-                stat: false, 
-                error: `Failed to get current path: ${error instanceof Error ? error.message : String(error)}` 
-            });
+            res.status(500).json({ error: String(error) });
         }
     }
 
@@ -696,17 +675,10 @@ class RecServer {
                 return;
             }
 
-            const pathInfo = await req.session!.localFileSystem.stat(path);
-            res.json({ 
-                stat: true, 
-                data: pathInfo,
-                message: 'Path info retrieved successfully' 
-            });
+            const result = await req.session!.localFileSystem.stat(path);
+            this.sendResult(res, result);
         } catch (error) {
-            res.status(400).json({ 
-                stat: false, 
-                error: `Failed to get path info: ${error instanceof Error ? error.message : String(error)}` 
-            });
+            res.status(500).json({ error: String(error) });
         }
     }
 
