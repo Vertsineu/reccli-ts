@@ -29,7 +29,7 @@ class UploadWorker extends WorkerBase {
 
         // Check if folder already exists in remote parent folder
         const folderFiles = (await this.api.listById(id, diskType, groupId)).datas;
-        const existingFolder = folderFiles.find((f: any) => f.type === "folder" && f.name === name);
+        const existingFolder = folderFiles.find(f => f.type === "folder" && f.name === name);
 
         if (existingFolder) {
             // Folder already exists, use existing folder ID
@@ -45,6 +45,18 @@ class UploadWorker extends WorkerBase {
 
         // construct tasks using the folder ID (either existing or newly created)
         const files = fs.readdirSync(path);
+        // Sort files: folders first, then files, both sorted by name
+        files.sort((a, b) => {
+            const statsA = fs.statSync(path + "/" + a);
+            const statsB = fs.statSync(path + "/" + b);
+            const typeA = statsA.isDirectory() ? "folder" : "file";
+            const typeB = statsB.isDirectory() ? "folder" : "file";
+            
+            if (typeA !== typeB) {
+                return typeA === "folder" ? -1 : 1;
+            }
+            return a.localeCompare(b);
+        });
         const tasks = files.map(f => {
             const p = path + "/" + f;
             const stats = fs.statSync(p);
@@ -89,7 +101,7 @@ class UploadWorker extends WorkerBase {
                 // Check if file already exists in remote folder
                 const fileName = path.split("/").pop()!;
                 const folderFiles = (await this.api.listById(id, diskType, groupId)).datas;
-                const existingFile = folderFiles.find((f: any) => f.type === "file" && 
+                const existingFile = folderFiles.find(f => f.type === "file" && 
                     (f.file_ext ? f.name + "." + f.file_ext : f.name) === fileName);
 
                 if (!existingFile) break;

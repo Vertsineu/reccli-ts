@@ -40,7 +40,14 @@ class TransferWorker extends WorkerBase {
 
         // construct tasks
         const files = (await this.api.listById(id, diskType, groupId)).datas;
-        const tasks = files.map((f: any) => ({
+        // Sort files: folders first, then files, both sorted by name
+        files.sort((a, b) => {
+            if (a.type !== b.type) {
+                return a.type === "folder" ? -1 : 1;
+            }
+            return a.name.localeCompare(b.name);
+        });
+        const tasks = files.map(f => ({
             id: f.number,
             diskType: f.disk_type,
             groupId: groupId, // extend groupId from parent task
