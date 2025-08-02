@@ -101,6 +101,12 @@ class RecServer {
         this.app.get('/api/pandav/du', this.panDavGetPathSize.bind(this));
         this.app.get('/api/pandav/exists', this.panDavCheckExists.bind(this));
 
+        // Local File System operations
+        this.app.get('/api/local/list', this.localListDirectory.bind(this));
+        this.app.post('/api/local/cd', this.localChangeDirectory.bind(this));
+        this.app.get('/api/local/pwd', this.localGetCurrentPath.bind(this));
+        this.app.get('/api/local/stat', this.localGetPathInfo.bind(this));
+
         // Transfer operations
         this.app.post('/api/transfer/create', this.createTransfer.bind(this));
         this.app.post('/api/transfer/:taskId/start', this.startTransfer.bind(this));
@@ -454,11 +460,19 @@ class RecServer {
     // Transfer endpoints
     private createTransfer(req: AuthenticatedRequest, res: Response): void {
         try {
-            const { srcPath, destPath } = req.body;
+            const { srcPath, destPath, transferType } = req.body;
+            
+            // Validate transferType
+            if (!transferType || !['webdav', 'disk'].includes(transferType)) {
+                res.status(400).json({ error: 'transferType must be either "webdav" or "disk"' });
+                return;
+            }
+            
             const taskId = this.transferManager.createTransferTask(
                 req.session!.id,
                 srcPath,
-                destPath
+                destPath,
+                transferType
             );
             res.json({ taskId });
         } catch (error) {
@@ -615,6 +629,84 @@ class RecServer {
             res.json(result);
         } else {
             res.status(400).json(result);
+        }
+    }
+
+    // Local File System endpoints
+    private async localListDirectory(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const path = req.query.path as string;
+            const directory = await req.session!.localFileSystem.ls(path);
+            res.json({ 
+                stat: true, 
+                data: directory,
+                message: 'Directory listed successfully' 
+            });
+        } catch (error) {
+            res.status(400).json({ 
+                stat: false, 
+                error: `Failed to list directory: ${error instanceof Error ? error.message : String(error)}` 
+            });
+        }
+    }
+
+    private async localChangeDirectory(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const { path } = req.body;
+            if (!path) {
+                res.status(400).json({ stat: false, error: 'Path is required' });
+                return;
+            }
+
+            const newPath = await req.session!.localFileSystem.cd(path);
+            res.json({ 
+                stat: true, 
+                data: { path: newPath },
+                message: 'Directory changed successfully' 
+            });
+        } catch (error) {
+            res.status(400).json({ 
+                stat: false, 
+                error: `Failed to change directory: ${error instanceof Error ? error.message : String(error)}` 
+            });
+        }
+    }
+
+    private localGetCurrentPath(req: AuthenticatedRequest, res: Response): void {
+        try {
+            const currentPath = req.session!.localFileSystem.pwd();
+            res.json({ 
+                stat: true, 
+                data: { path: currentPath },
+                message: 'Current path retrieved successfully' 
+            });
+        } catch (error) {
+            res.status(500).json({ 
+                stat: false, 
+                error: `Failed to get current path: ${error instanceof Error ? error.message : String(error)}` 
+            });
+        }
+    }
+
+    private async localGetPathInfo(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const path = req.query.path as string;
+            if (!path) {
+                res.status(400).json({ stat: false, error: 'Path is required' });
+                return;
+            }
+
+            const pathInfo = await req.session!.localFileSystem.stat(path);
+            res.json({ 
+                stat: true, 
+                data: pathInfo,
+                message: 'Path info retrieved successfully' 
+            });
+        } catch (error) {
+            res.status(400).json({ 
+                stat: false, 
+                error: `Failed to get path info: ${error instanceof Error ? error.message : String(error)}` 
+            });
         }
     }
 

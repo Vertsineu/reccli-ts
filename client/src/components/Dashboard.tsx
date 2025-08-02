@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, LogOut, User, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowRight, LogOut, User, RefreshCw, Trash2, Download } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import FileExplorer from '@/components/FileExplorer';
 import TransferMonitor from '@/components/TransferMonitor';
+import LocalDirectoryPicker from '@/components/LocalDirectoryPicker';
 import { FileItem, TransferTask } from '@/types/api';
 import { apiClient } from '@/services/api';
 
@@ -13,6 +14,7 @@ const Dashboard: React.FC = () => {
     const [selectedPanDavPath, setSelectedPanDavPath] = useState<string>('');
     const [transfers, setTransfers] = useState<TransferTask[]>([]);
     const [transferring, setTransferring] = useState(false);
+    const [downloadingToDisk, setDownloadingToDisk] = useState(false);
     const [deletingPanDav, setDeletingPanDav] = useState(false);
     const [maxConcurrent, setMaxConcurrent] = useState<number>(2); // Default to 2
     const [selectedRecFilesSize, setSelectedRecFilesSize] = useState<number>(0);
@@ -20,6 +22,7 @@ const Dashboard: React.FC = () => {
     const [clearRecSelection, setClearRecSelection] = useState(false);
     const [clearPanDavSelection, setClearPanDavSelection] = useState(false);
     const [refreshPanDav, setRefreshPanDav] = useState(false);
+    const [showLocalDirectoryPicker, setShowLocalDirectoryPicker] = useState(false);
 
     // 用 Map 来跟踪各个路径的文件选择，但不作为状态存储
     const selectedRecFilesByPathRef = React.useRef<Map<string, FileItem[]>>(new Map());
@@ -254,6 +257,68 @@ const Dashboard: React.FC = () => {
         }
     };
 
+    const handleDownloadToDisk = async () => {
+        if (selectedRecFilesTotal.length === 0) {
+            alert('Please select files from Rec to download');
+            return;
+        }
+
+        // Show directory picker instead of directly downloading
+        setShowLocalDirectoryPicker(true);
+    };
+
+    const handleLocalDirectorySelected = async (selectedPath: string) => {
+        setDownloadingToDisk(true);
+
+        try {
+            // Create all download tasks first (without starting them)
+            const createdTaskIds: string[] = [];
+
+            for (const file of selectedRecFilesTotal) {
+                const srcPath = (file as any).fullPath || file.name;
+                const { taskId } = await apiClient.createTransfer(srcPath, selectedPath, 'disk');
+                createdTaskIds.push(taskId);
+            }
+
+            // Get current running tasks count
+            const currentTasks = await apiClient.getAllTransfers();
+            const queuedTasksCount = currentTasks.filter(task => task.status !== 'pending').length;
+
+            // Calculate how many new tasks we can start immediately
+            const availableSlots = Math.max(0, maxConcurrent - queuedTasksCount);
+            const tasksToStart = createdTaskIds.slice(0, availableSlots);
+
+            // Start only the allowed number of tasks
+            for (const taskId of tasksToStart) {
+                await apiClient.startTransfer(taskId);
+            }
+
+            // Clear selection after creating downloads
+            setSelectedRecFilesTotal([]);
+            selectedRecFilesByPathRef.current.clear(); // 清除 ref 中的数据
+            setSelectedRecFilesSize(0);
+            setClearRecSelection(true);
+
+            // Reset the clear flag after a short delay
+            setTimeout(() => setClearRecSelection(false), 100);
+
+            // Refresh transfers list
+            const updatedTasks = await apiClient.getAllTransfers();
+            const activeTasks = updatedTasks.filter(task => task.status !== 'completed');
+            setTransfers(activeTasks);
+
+            // Log info about created tasks (for debugging)
+            const startedCount = tasksToStart.length;
+            const pendingCount = createdTaskIds.length - startedCount;
+            console.log(`Created ${createdTaskIds.length} download task(s), started ${startedCount}, ${pendingCount} pending (max concurrent: ${maxConcurrent})`);
+        } catch (error: any) {
+            console.error('Download failed:', error);
+            alert(`Download failed: ${error.response?.data?.error || error.message}`);
+        } finally {
+            setDownloadingToDisk(false);
+        }
+    };
+
     const handleTaskUpdate = async () => {
         // No need to fetch immediately since we already have smart polling
         // The polling interval will pick up changes automatically within 2-5 seconds
@@ -458,6 +523,7 @@ const Dashboard: React.FC = () => {
                                     value={maxConcurrent}
                                     onChange={(e) => setMaxConcurrent(Number(e.target.value))}
                                     className="form-select text-sm border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                                    aria-label="Maximum concurrent transfers"
                                 >
                                     {[1, 2, 3, 4, 5, 6, 7, 8].map(num => (
                                         <option key={num} value={num}>{num}</option>
@@ -497,6 +563,24 @@ const Dashboard: React.FC = () => {
                             )}
 
                             <button
+                                onClick={handleDownloadToDisk}
+                                disabled={selectedRecFilesTotal.length === 0 || downloadingToDisk}
+                                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {downloadingToDisk ? (
+                                    <>
+                                        <RefreshCw className="w-4 h-4 animate-spin" />
+                                        Downloading...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download className="w-4 h-4" />
+                                        Download to Local
+                                    </>
+                                )}
+                            </button>
+
+                            <button
                                 onClick={handleStartTransfer}
                                 disabled={selectedRecFilesTotal.length === 0 || !selectedPanDavPath || transferring}
                                 className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
@@ -524,6 +608,13 @@ const Dashboard: React.FC = () => {
                     maxConcurrent={maxConcurrent}
                 />
             </main>
+
+            {/* Local Directory Picker Modal */}
+            <LocalDirectoryPicker
+                isOpen={showLocalDirectoryPicker}
+                onClose={() => setShowLocalDirectoryPicker(false)}
+                onSelect={handleLocalDirectorySelected}
+            />
         </div>
     );
 };

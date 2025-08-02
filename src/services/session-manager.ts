@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import RecFileSystem from '@services/rec-file-system.js';
 import PanDavFileSystem from '@services/pan-dav-file-system.js';
+import LocalFileSystem from '@services/local-file-system.js';
 import RecAPI from '@services/rec-api.js';
 import { createPanDavClient, PanDavAuth } from '@services/pan-dav-api.js';
 
@@ -11,6 +12,7 @@ export interface SessionData {
     recFileSystem: RecFileSystem;
     panDavAuth: PanDavAuth;
     panDavFileSystem: PanDavFileSystem;
+    localFileSystem: LocalFileSystem;
     createdAt: Date;
     lastAccessedAt: Date;
 }
@@ -53,6 +55,7 @@ class SessionManager {
             // Both logins successful, create file systems
             const recFileSystem = new RecFileSystem(recApi);
             const panDavFileSystem = new PanDavFileSystem(panDavClient);
+            const localFileSystem = new LocalFileSystem();
 
             // Generate session ID
             const sessionId = uuidv4();
@@ -65,6 +68,7 @@ class SessionManager {
                 recFileSystem,
                 panDavAuth,
                 panDavFileSystem,
+                localFileSystem,
                 createdAt: now,
                 lastAccessedAt: now
             };

@@ -147,10 +147,11 @@ class ApiClient {
     }
 
     // Transfer Operations
-    async createTransfer(srcPath: string, destPath: string): Promise<{ taskId: string }> {
+    async createTransfer(srcPath: string, destPath: string, transferType: 'webdav' | 'disk' = 'webdav'): Promise<{ taskId: string }> {
         const response = await this.api.post<{ taskId: string }>('/transfer/create', {
             srcPath,
-            destPath
+            destPath,
+            transferType
         });
         return response.data;
     }
@@ -192,6 +193,31 @@ class ApiClient {
 
     async deleteTransfer(taskId: string): Promise<void> {
         await this.api.delete(`/transfer/${taskId}`);
+    }
+
+    // Local File System
+    async localListDirectory(path?: string): Promise<FileItem[]> {
+        const response = await this.api.get<ApiResponse<{ path: string; name: string; files: FileItem[] }>>('/local/list', {
+            params: path ? { path } : {}
+        });
+        return response.data.data.files;
+    }
+
+    async localChangeDirectory(path: string): Promise<{ currentPath: string }> {
+        const response = await this.api.post<ApiResponse<{ path: string }>>('/local/cd', { path });
+        return { currentPath: response.data.data.path };
+    }
+
+    async localGetCurrentPath(): Promise<{ currentPath: string }> {
+        const response = await this.api.get<ApiResponse<{ path: string }>>('/local/pwd');
+        return { currentPath: response.data.data.path };
+    }
+
+    async localStat(path: string): Promise<{ exists: boolean; isDirectory: boolean; isWritable: boolean }> {
+        const response = await this.api.get<ApiResponse<{ exists: boolean; isDirectory: boolean; isWritable: boolean }>>('/local/stat', {
+            params: { path }
+        });
+        return response.data.data;
     }
 }
 

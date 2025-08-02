@@ -13,6 +13,7 @@ export interface TransferTask {
     sessionId: string;
     srcPath: string;
     destPath: string;
+    transferType: 'webdav' | 'disk';
     status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
     progress: number;
     totalSize: number;

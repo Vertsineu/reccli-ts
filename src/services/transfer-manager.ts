@@ -16,6 +16,7 @@ export interface TransferTask {
     sessionId: string;
     srcPath: string;
     destPath: string;
+    transferType: 'webdav' | 'disk';
     status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
     progress: number; // 0-1000
     totalSize: number;
@@ -47,7 +48,8 @@ class TransferManager extends EventEmitter {
     public createTransferTask(
         sessionId: string,
         srcPath: string,
-        destPath: string
+        destPath: string,
+        transferType: 'webdav' | 'disk'
     ): string {
         const taskId = uuidv4();
         const task: TransferTask = {
@@ -55,6 +57,7 @@ class TransferManager extends EventEmitter {
             sessionId,
             srcPath,
             destPath,
+            transferType,
             status: 'pending',
             progress: 0,
             totalSize: 0,
@@ -272,16 +275,40 @@ class TransferManager extends EventEmitter {
             throw new Error(`Source path not found: ${task.srcPath}`);
         }
 
-        // Get PanDav client
-        const panDavClient = panDavFileSystem.getClient();
-        if (!panDavClient) {
-            throw new Error('PanDav client not available');
-        }
+        // Validate destination based on transfer type
+        if (task.transferType === 'webdav') {
+            // Get PanDav client for WebDAV transfers
+            const panDavClient = panDavFileSystem.getClient();
+            if (!panDavClient) {
+                throw new Error('PanDav client not available');
+            }
 
-        // Validate destination
-        const destExists = await panDavClient.exists(task.destPath);
-        if (!destExists) {
-            throw new Error(`Destination path not found: ${task.destPath}`);
+            // Validate WebDAV destination
+            const destExists = await panDavClient.exists(task.destPath);
+            if (!destExists) {
+                throw new Error(`Destination path not found: ${task.destPath}`);
+            }
+        } else if (task.transferType === 'disk') {
+            // For disk transfers, validate local file system path
+            try {
+                const fs = await import('fs/promises');
+                const path = await import('path');
+                
+                // Check if destination directory exists, if not try to create it
+                const destDir = path.dirname(task.destPath);
+                try {
+                    await fs.access(destDir);
+                } catch {
+                    // Directory doesn't exist, try to create it
+                    try {
+                        await fs.mkdir(destDir, { recursive: true });
+                    } catch (error) {
+                        throw new Error(`Cannot create destination directory ${destDir}: ${error instanceof Error ? error.message : String(error)}`);
+                    }
+                }
+            } catch (error) {
+                throw new Error(`Failed to validate destination path: ${error instanceof Error ? error.message : String(error)}`);
+            }
         }
 
         // Final cancellation check before transfer
@@ -330,15 +357,37 @@ class TransferManager extends EventEmitter {
             this.emit('taskProgress', task);
         };
 
-        // Use RecFileSystem's transfer method with progress callback, abort signal and pause signal
-        const transferResult = await recFileSystem.transfer(
-            task.srcPath,
-            task.destPath,
-            panDavClient,
-            progressCallback,
-            abortSignal,
-            pauseSignal
-        );
+        // Choose transfer method based on transferType
+        let transferResult;
+        
+        if (task.transferType === 'webdav') {
+            // Get PanDav client for WebDAV transfers
+            const panDavClient = panDavFileSystem.getClient();
+            if (!panDavClient) {
+                throw new Error('PanDav client not available');
+            }
+            
+            // Use RecFileSystem's transfer method with progress callback, abort signal and pause signal
+            transferResult = await recFileSystem.transfer(
+                task.srcPath,
+                task.destPath,
+                panDavClient,
+                progressCallback,
+                abortSignal,
+                pauseSignal
+            );
+        } else if (task.transferType === 'disk') {
+            // Use RecFileSystem's download method with progress callback, abort signal and pause signal
+            transferResult = await recFileSystem.download(
+                task.srcPath,
+                task.destPath,
+                progressCallback,
+                abortSignal,
+                pauseSignal
+            );
+        } else {
+            throw new Error(`Unsupported transfer type: ${task.transferType}`);
+        }
 
         if (!transferResult.stat) {
             throw new Error(transferResult.msg);
