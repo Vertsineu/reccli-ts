@@ -14,6 +14,8 @@
     "client": "cd client && npm run dev",
     "client:build": "cd client && npm run build",
     "client:install": "cd client && npm install",
+    "clean": "rm -rf dist && rm -rf client/dist",
+    "clean:all": "rm -rf dist && rm -rf client/dist && rm -rf node_modules && rm -rf client/node_modules",
     "test": "echo \"Error: no test specified\" && exit 1",
     "prepublishOnly": "npm run build"
   },
