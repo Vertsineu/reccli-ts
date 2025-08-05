@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import { Stats } from 'fs';
 import path from 'path';
 import os from 'os';
-import * as drivelist from 'drivelist';
 
 export type RetType<T> =
     { stat: true, data: T } |
@@ -35,7 +34,7 @@ export class LocalFileSystem {
     }
 
     /**
-     * Get all available drives (using drivelist)
+     * Get all available drives (without drivelist dependency)
      */
     private async getSystemDrives(): Promise<Array<{ name: string; label: string; mountpoint: string; }>> {
         // Early return for Unix-like systems
@@ -43,34 +42,34 @@ export class LocalFileSystem {
             return [{ name: '/', label: 'Root filesystem', mountpoint: '/' }];
         }
 
-        // Windows: get drive list using drivelist
-        try {
-            const drives = await drivelist.list();
-            const mountpoints: Array<{ name: string; label: string; mountpoint: string; }> = [];
-            
-            for (const drive of drives) {
-                if (drive.mountpoints && drive.mountpoints.length > 0) {
-                    for (const mp of drive.mountpoints) {
-                        // mp.path is directly in format like "C:\", "D:\", etc.
-                        // Just need to remove the trailing backslash to get drive letter
-                        const driveLetter = mp.path.replace(/\\$/, ''); // Remove trailing \
-                        mountpoints.push({
-                            name: driveLetter,
-                            label: driveLetter,  // Only show drive letter like C:, D:, E:
-                            mountpoint: driveLetter  // Use drive letter format directly as mountpoint
-                        });
-                    }
-                }
+        // Windows: check drive letters A-Z
+        const mountpoints: Array<{ name: string; label: string; mountpoint: string; }> = [];
+        
+        // Check common drive letters (A-Z)
+        for (let i = 65; i <= 90; i++) { // ASCII codes for A-Z
+            const driveLetter = String.fromCharCode(i) + ':';
+            try {
+                // Try to access the drive by checking if it exists
+                await fs.access(driveLetter + '\\');
+                mountpoints.push({
+                    name: driveLetter,
+                    label: driveLetter,
+                    mountpoint: driveLetter
+                });
+            } catch {
+                // Drive not accessible, skip it
+                continue;
             }
-            
-            // Sort by drive letter
-            mountpoints.sort((a, b) => a.name.localeCompare(b.name));
-            return mountpoints;
-        } catch (error) {
-            console.warn('Failed to get drive list:', error);
-            // Fallback: return C: drive
-            return [{ name: 'C:', label: 'C:', mountpoint: 'C:' }];
         }
+        
+        // If no drives found, fallback to C: drive
+        if (mountpoints.length === 0) {
+            mountpoints.push({ name: 'C:', label: 'C:', mountpoint: 'C:' });
+        }
+        
+        // Sort by drive letter
+        mountpoints.sort((a, b) => a.name.localeCompare(b.name));
+        return mountpoints;
     }
 
     /**
