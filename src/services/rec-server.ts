@@ -717,11 +717,16 @@ class RecServer {
     }
 
     public start(): Promise<void> {
-        return new Promise((resolve) => {
-            this.app.listen(this.port, '127.0.0.1', () => {
-                console.log(`🚀 Rec server is running on port ${this.port}`);
-                console.log(`📖 API documentation: http://localhost:${this.port}/health`);
-                resolve();
+        return new Promise((resolve, reject) => {
+            this.app.listen(this.port, '127.0.0.1', (error?) => {
+                if (error) {
+                    reject(error);
+                    return;
+                } else {
+                    console.log(`🚀 Rec server is running on port ${this.port}`);
+                    console.log(`📖 API documentation: http://localhost:${this.port}/health`);
+                    resolve();
+                }
             });
         });
     }
