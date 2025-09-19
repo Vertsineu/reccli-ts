@@ -16,7 +16,7 @@ async function requestRangedDownload(url: string, startByte: number = 0, abortSi
                 'Range': `bytes=${startByte}-`
             }
         });
-        
+
         return response;
     } catch (error) {
         // Handle network errors gracefully
@@ -42,7 +42,7 @@ export class PausableDownloadStream extends Readable {
 
     // url must support range requests
     constructor(
-        private url: string, 
+        private url: string,
         private pauseSignal?: PauseSignal,
         private abortSignal?: AbortSignal
     ) {
@@ -76,7 +76,7 @@ export class PausableDownloadStream extends Readable {
             // Resume: start new stream with Range header
             this.startStream().catch(error => {
                 if (!this.abortSignal?.aborted) {
-                    this.emit('error', error);
+                    this.destroy(error);
                 }
             });
         }
@@ -105,7 +105,7 @@ export class PausableDownloadStream extends Readable {
             }
         } catch (error) {
             if (!this.abortSignal?.aborted) {
-                this.emit('error', error);
+                this.destroy(error instanceof Error ? error : new Error(String(error)));
             }
             return;
         }
@@ -127,10 +127,10 @@ export class PausableDownloadStream extends Readable {
                 this.push(null);
             }
         });
-        
+
         this.downloadStream.on('error', (error) => {
             if (!this.abortSignal?.aborted) {
-                this.emit('error', error);
+                this.destroy(error);
             }
         });
     }
@@ -142,7 +142,7 @@ export class PausableDownloadStream extends Readable {
             if (!this.pauseSignal?.paused && !this.abortSignal?.aborted) {
                 this.startStream().catch(error => {
                     if (!this.abortSignal?.aborted) {
-                        this.emit('error', error);
+                        this.destroy(error);
                     }
                 });
             }

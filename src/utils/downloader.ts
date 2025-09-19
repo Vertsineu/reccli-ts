@@ -24,7 +24,7 @@ export async function downloadFile(url: string, dest: string, onProgress?: Progr
         progressRateStream.destroy();
         writer.destroy();
     };
-    
+
     abortSignal?.addEventListener('abort', abortHandler);
 
     try {
@@ -53,8 +53,13 @@ export async function downloadToWebDav(url: string, dest: string, client: PanDav
     // Create a progress rate stream for tracking transfer progress
     const progressRateStream = new ProgressRateStream(onProgress);
     
-    // Connect the streams
+    // Connect the streams and handle errors properly
     const uploadStream = downloadStream.pipe(progressRateStream);
+    
+    // Forward downloadStream errors to uploadStream to ensure they're caught
+    downloadStream.on('error', (error) => {
+        uploadStream.destroy(error);
+    });
 
     // when failed
     const abortHandler = () => {
@@ -68,8 +73,14 @@ export async function downloadToWebDav(url: string, dest: string, client: PanDav
     abortSignal?.addEventListener('abort', abortHandler);
 
     try {
-        // Create a promise-based approach for partial file updates
+        // Upload downloaded file contents
         return await client.putFileContents(dest, uploadStream);
+    } catch (error) {
+        // Clean up streams on error
+        downloadStream.destroy();
+        progressRateStream.destroy();
+        uploadStream.destroy();
+        throw error;
     } finally {
         // Always remove the abort listener to prevent memory leaks
         abortSignal?.removeEventListener('abort', abortHandler);
