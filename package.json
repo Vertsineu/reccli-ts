@@ -19,6 +19,11 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "prepublishOnly": "npm run build"
   },
+  "files": [
+    "dist/",
+    "README.md",
+    "package.json"
+  ],
   "keywords": [],
   "author": "Vertsineu <vertsineu@qq.com> (https://github.com/Vertsineu)",
   "license": "MIT",
